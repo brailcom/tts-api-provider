@@ -1,0 +1,6 @@
+2006-05-27  Hynek Hanke  <hanke@chopin>
+
+	* Initial version containing first documentation including
+	description of text protocol version of TTS API and design draft.
+	Python version of TTS API is included in src/api/python/.
+

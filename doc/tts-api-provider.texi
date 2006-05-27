@@ -1,0 +1,1112 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@setfilename tts-api-provider.info
+@settitle TTS API Provider
+@finalout
+@c @setchapternewpage odd
+@c %**end of header
+
+@copying
+Copyright @copyright{} 2006 Brailcom, o.p.s.
+All rights reserved.
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.2 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with no Front-Cover Texts and no Back-Cover Texts.
+A copy of the license is included in the section entitled ``GNU Free
+Documentation License.''
+@end quotation
+
+A copy of the license is included in the section entitled ``GNU
+General Public License''
+@end copying
+
+@c @set version 2006-03-09
+
+
+@c Directory, keywords
+@dircategory Sound
+@dircategory Development
+@dircategory Accessibility
+
+@direntry
+* TTS API Provider: (tts-api).    TTS API Provider
+@end direntry
+
+@c Title page for printed version
+@titlepage
+@title TTS API Provider 
+
+@author Hynek Hanke, Brailcom <@email{hanke@@brailcom.org}>
+@author Jan Buchal, Brailcom <@email{buchal@@brailcom.org}>
+@author Gary Cramblitt, KDE <@email{garycramblitt@@comcast.net}> 
+
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+@contents
+
+@c Title page for INFO
+@ifnottex
+@node Top, Introduction, (dir), (dir)
+@top TTS API Provider
+@insertcopying
+@end ifnottex
+
+@menu
+* Introduction::                
+* Design::                      
+* TTS API Implementations::     
+@end menu
+
+@node Introduction
+@chapter Introduction
+
+@node Design
+@chapter Design
+
+TTS API Provider is composed of four independent parts.  The
+@emph{provider itself}, running on the system and interfacing
+applications with speech synthesizers and doing the necessary
+emulations, the various @emph{drivers} that translate the APIs of the
+synthesizers into TTS API, @emph{driver template library} to help with
+developement of drivers and @emph{convenience libraries for
+applications} which provide easy access to TTS API from various
+languages.
+
+@menu
+* General Design::              
+* TTS API Provider (core)::     
+* Drivers::                     
+* Driver Template Library::     
+* Convenience Libraries for Applications::  
+@end menu
+
+@node General Design
+@section General Design
+
+The intended middle-term design, as also described in other sections
+in this chapter, is demonstrated on the following picture. Please keep
+in mind the picture was not meant to be exhaustive and only contains
+the main ideas and some examples.
+
+@image{figures/architecture,155mm,,TTS API Provider architecture}
+
+Such an architecture is not ideal, however. The optimal future design
+is demonstrated on the picture bellow. Most important, TTS API
+Provider should not have to take care of directly handling audio
+devices and doing its own audio output. This is a task unrelated to
+the Text-to-Speech process, necessary for many other applications
+outside the domain of speech synthesis and accessibility, and as such
+best be left to an independent component. Only because currently we do
+not know of any general Free Software audio component that could
+handle our needs, we will temporarily provide our own basic audio
+output.
+
+@image{figures/architecture-future,155mm,,TTS API Provider architecture in the future}
+
+Also, ideally, audio should not be transported through the engine
+driver, but could be directed from the synthesizer itself directly to
+the destination, lowering the latency and transport overhead, as
+is illustrated on the picture in case of Festival.
+
+@node TTS API Provider (core)
+@section TTS API Provider (core)
+
+@heading Functionality
+
+@itemize
+    @item manage all drivers
+    @item emulate necessary functionality not supported by the drivers
+    @item provide interface to applications
+@end itemize
+
+@heading Implementation
+
+@itemize
+@item License: GNU GPL
+@item Language: Python
+@item Dependencies: Python
+@end itemize
+
+TTS API Provider will be a separate process for the following
+reasons:
+
+@itemize
+@item
+There will be only one instance of it running on the system at a given
+time, which simplifies things like rereading configuration after
+configuration change, maintaining context on simple non-context
+synthesizers (!), solving of conflicts in access to hardware
+synthesizers. It will make it possible not to lunch unnecessarily many
+drivers for one synthesizer (!).
+
+@item
+Applications won't have compile dependency on TTS API Provider.
+
+@item
+Applications won't be affected by TTS API Provider stability.
+
+@item
+The language of implementation of TTS API Provider is not important
+for the applications.
+
+@item
+Problems with TTS API Provider will be easier to diagnose for the user
+and its debugging will be easier for the developers.
+
+@item
+Communication can be led over network.
+@end itemize
+
+
+TTS API Provider communication layer will provide a TCP version of TTS
+API. This TCP inter-process communication will be wrapped in
+convenience libraries (4) for easy use in the application. Care will
+be taken to avoid dependency on this particular communication method
+so that in the future, other IPC methods like DBUS can be added if
+necessary.
+
+TTS API Provider will automatically launch available engine
+drivers. In order to achieve context independency of clients, to allow
+more clients to perform synthesis at once and to keep the synthesizer
+drivers simple (not require them to explicitly handle various
+clients), it might sometimes be necessary to have several instances of
+a driver running to serve the various clients.
+
+TTS API Provider will temporarily handle audio output if
+necessary. Audio output code should not be a part of TTS API Provider,
+but currently no audio output framework is available on the Free
+Software platform which would fit our needs. The audio handling part
+is to be removed as soon as such a framework is available.
+
+TTS API Provider will emulate the necessary functionality that is
+reported by the synthesizer drivers through TTS API as
+non-available. The most important examples are: SSML to plain-text
+conversion, context switching and breaking of long text into smaller
+chunks.
+
+TTS API Provider will provide the defer() and say_deferred() mechanism
+for all synthesizers (maintaining the necessary heap of messages for
+synthesizers who do not support it). This will significantly release
+implementation burden on the applications.
+
+@node Drivers
+@section Drivers
+
+
+@heading Functionality
+
+@itemize
+@item initialization of and communication with synthesizers
+@item conversion between TTS API and synthesizer API
+@item only emulate functionality where necessary
+for conversion between TTS API and synthesizer API
+@end itemize
+
+@heading Implementation
+
+@itemize @w{}
+@item @emph{License}: various
+@item @emph{Language}: various, most often C
+@item @emph{Dependencies}: various, driver template library
+@end itemize
+
+Drivers will be separate processes as is completely necessary
+for legal reasons and for the reasons of stability.
+
+Drivers can be built using the driver template library (3),
+although this is not necessary.
+
+Drivers will communicate through pipes, reading from their
+standard input and writing to their standard output.
+
+@node Driver Template Library
+@section Driver Template Library
+
+
+@heading Functionality:
+@itemize
+@item take care of IPC communication (TTS API + audio socket)
+@item provide the necessary infrastructure (threads etc.)
+so that the driver author can only implement the necessary TTS
+API functions
+@item provide tools to make conversion between TTS API and the various
+synthesizer APIs easier
+@end itemize
+
+@heading Implementation
+@itemize @w{}
+@item @emph{License}: GNU LGPL
+@item @emph{Language}: C (maybe also Python bindings or Python version)
+@item @emph{Dependencies}: libc, ?
+@end itemize
+
+@node Convenience Libraries for Applications
+@section Convenience Libraries for Applications
+
+
+@heading Functionality
+
+@itemize
+@item expose a simple library version of TTS API and take
+care of	IPC communication
+@end itemize
+
+@heading Implementation
+
+@itemize @w{}
+@item @emph{License}: GNU LGPL
+@item @emph{Language}: C, Python
+@item @emph{Dependencies}: libc
+@end itemize
+
+@node TTS API Implementations
+@chapter TTS API Implementations
+
+@menu
+* Text Protocol TTS API::       
+* Python TTS API::              
+@end menu
+
+@node Text Protocol TTS API
+@section Text Protocol TTS API
+
+This section documents the text protocol in use for communication
+over sockets, pipes and other channels where serialized textual
+protocol is a convenient interface.
+
+In th protocol description bellow, accent is put on form.  The exact
+expected behavior of all the commands and the exact meaning of the
+arguments is described in TTS API specifications available from
+@url{http://www.freebsoft.org/doc/tts-api/} and is not repeated in
+this document. All commands or functions and their arguments have
+an identical or very similar name to those in the original TTS API
+specifications.
+
+@menu
+* General Rules (text protocol)::  
+* Return Codes::                
+* Driver Discovery (text protocol)::  
+* Voice Discovery::             
+* Speech Synthesis Commands (text protocol)::  
+* Speech Control Commands (text protocol)::  
+* Parameter Settings (text protocol)::  
+* Event Callbacks (text protocol)::  
+* Other Commands (text protocol)::  
+@end menu
+
+@node General Rules (text protocol)
+@subsection General Rules (text protocol)
+
+The text protocol version of TTS API is defined as a set
+of text commands in the usual manner for common Internet
+protocols. All the characters are encoded using the UTF-8
+encoding.
+
+Each command, unless specified otherwise, consists of exactly
+one line.  The line is sent in the following format:
+
+@example
+@var{command} @var{arg} ...
+@end example
+
+where @var{command} is a case insensitive command name and @var{arg}s
+are its arguments separated by spaces.  The command arguments which
+come from a defined set of values are case insensitive as well.  The
+number of arguments is dependent on the particular command and there
+can be commands having no arguments.
+
+All input and output lines must be ended with a pair of
+carriage return and line feed characters, in that order.
+
+An SSIP connection is preferably closed by issuing the @code{QUIT}
+command, see @ref{Other Commands (text protocol)}.
+
+The protocol defined here is synchronous --- you send commands and
+only after a complete response arrives back are you allowed to send
+the next command. The only exceptions to synchronous communication are
+event and index mark notifications sent by the server in order to
+inform the client about a task in progress. Such notifications (but
+only if requested) are sent asynchronously to the connection.
+
+Usually, the connection remains open during the whole run of the
+particular client application.  If you close the connection and open
+it again, you must set all the previously set parameters again,
+session parameters are not stored between connections.
+
+Replies have the following format:
+
+@example
+@var{ccc}-line 1
+@var{ccc}-line 2
+...
+@var{ccc}-line @var{n}-1
+@var{ddd} line @var{n}
+@end example
+
+where @var{n} is a positive integer, and @var{ccc} and @var{ddd} are
+three-digit long numeric codes identifying the result of the command.
+The last line determines the overall result of the command. The result
+code is followed by an English message describing the result of the
+action in a human readable form.
+
+@node Return Codes
+@subsection Return Codes
+
+Each line of the SSIP output starts with a three-digit numeric code of
+the form @var{NXX} where @var{N} determines the result group and
+@var{xx} denotes the finer classification of the result.
+
+SSIP defines the following result groups:
+
+@table @code
+@item 1xx
+Informative response --- general information about the protocol, help
+messages.
+
+@item 2xx
+Operation was completely successful.
+
+@item 3xx
+Server side error, problem on the server side or in the driver.
+@table @code
+@item 301
+Not supported by the driver.
+@item 302
+Cannot access driver.
+@end table
+@item 4xx
+Client error, invalid arguments or parameters received.
+
+@item 5xx
+Client error, invalid command syntax, unparseable input.
+
+@item 7xx
+Events and index marks notifications.
+@table @code
+@item 701
+Message event.
+@item 702
+Sentence or word event.
+@item 703
+Index mark event.
+@end table
+@end table
+
+Result groups @var{1xx} and @var{2xx} correspond to successful
+actions, groups to @var{3xx} to @var{5xx} unsuccessful actions.  Only
+the groups defined here may be returned in a valid TTS API connection.
+
+Currently, for return codes in the range @code{100}--@code{299} and
+@code{302}--@code{399}, only the meaning of the first digit of the
+result code is defined.  The last two digits are insignificant and can
+be of any value.  Clients shouldn't rely on the unspecified digits in
+any way.
+
+However, the return codes in the range @code{700}--@code{800},
+reserved for events notification, are well defined in the appropriate
+section of the documentation and client applications can rely on
+them.
+
+In the future, these return codes should be fixed so that clients can
+rely on them.
+
+@node Driver Discovery (text protocol)
+@subsection Driver Discovery (text protocol)
+
+@table @code
+
+@item LIST DRIVERS
+
+Lists the available drivers.
+
+The reply contains several lines of the following form, each one for a
+different driver.
+
+@example
+201-@var{driver-id} "@var{synthesizer-name}" "@var{synthesizer-version}" "@var{driver-version}"
+@end example
+
+Example of usage:
+@example
+LIST DRIVERS
+201-festival "Festival Speech Synthesis System" "1.94beta" "1.2"
+201-flite "Festival Lite" "1.2" "1.1"
+201 OK LIST OF DRIVERS SENT
+@end example
+
+@item DRIVER CAPABILITIES @var{driver-id}
+
+Return information about the capabilities of the given driver.
+
+The reply takes the following form. Each of the lines must
+be present in the following order and carry one of the specified values.
+
+@example
+202-can_list_voices @{@code{true}|@code{false}@}
+202-can_set_voice_by_properties @{@code{true}|@code{false}@}
+202-can_get_current_voice @{@code{true}|@code{false}@}    
+202-can_set_rate_relative @{@code{true}|@code{false}@}
+202-can_set_rate_absolute @{@code{true}|@code{false}@}
+202-can_get_rate_default @{@code{true}|@code{false}@}
+202-can_set_pitch_relative @{@code{true}|@code{false}@}
+202-can_set_pitch_absolute @{@code{true}|@code{false}@}
+202-can_get_pitch_default @{@code{true}|@code{false}@}
+202-can_set_pitch_range_relative @{@code{true}|@code{false}@}
+202-can_set_pitch_range_absolute @{@code{true}|@code{false}@}
+202-can_get_pitch_range_default @{@code{true}|@code{false}@}
+202-can_set_volume_relative @{@code{true}|@code{false}@}
+202-can_set_volume_absolute @{@code{true}|@code{false}@}
+202-can_get_volume_default @{@code{true}|@code{false}@}
+202-can_set_punctuation_mode_all @{@code{true}|@code{false}@}
+202-can_set_punctuation_mode_none @{@code{true}|@code{false}@}
+202-can_set_punctuation_mode_some @{@code{true}|@code{false}@}
+202-can_set_punctuation_detail @{@code{true}|@code{false}@}
+202-can_set_capital_letters_mode_spelling @{@code{true}|@code{false}@}
+202-can_set_capital_letters_mode_icon @{@code{true}|@code{false}@}
+202-can_set_capital_letters_mode_pitch @{@code{true}|@code{false}@}
+202-can_set_number_grouping @{@code{true}|@code{false}@}
+202-can_say_text_from_position @{@code{true}|@code{false}@}
+202-can_say_char @{@code{true}|@code{false}@}
+202-can_say_key @{@code{true}|@code{false}@}
+202-can_say_icon @{@code{true}|@code{false}@}
+202-can_set_dictionary @{@code{true}|@code{false}@}
+202-can_retrieve_audio @{@code{true}|@code{false}@}
+202-can_play_audio @{@code{true}|@code{false}@}
+202-can_report_events_by_sentences @{@code{true}|@code{false}@}
+202-can_report_events_by_words @{@code{true}|@code{false}@}
+202-can_report_custom_index_marks @{@code{true}|@code{false}@}
+202-honors_performance_guidelines @{@code{0}|@code{1}|@code{2}@}
+202-can_defer_message @{@code{true}|@code{false}@}
+202-can_parse_ssml @{@code{true}|@code{false}@}
+202-supports_multilingual_utterances @{@code{true}|@code{false}@}
+202 OK DRIVER CAPABILITIES SENT
+@end example
+
+Example of usage (incomplete reply)
+
+@example
+DRIVER CAPABILITIES festival
+202-can_list_voices @code{true}
+202-can_set_voice_by_properties @code{true}
+202-can_get_current_voice @code{true}    
+202-can_set_rate_relative @code{true}
+202-can_set_rate_absolute @code{true}
+202-can_get_rate_default @code{true}
+202-can_set_pitch_relative @code{true}
+[...]
+202-honors_performance_guidelines @code{2}
+202-can_defer_message @code{false}
+202-can_parse_ssml @code{true}
+202-supports_multilingual_utterances @code{false}
+202 OK DRIVER CAPABILITIES SENT
+@end example
+
+@end table
+
+@node Voice Discovery
+@subsection Voice Discovery
+
+@table @code
+
+@anchor{LIST VOICES}
+@item LIST VOICES @var{driver-id}
+
+List voices available for a given driver.
+
+The reply contains zero or more lines of the following form.
+@example
+203-"@var{name}" @var{language} "@var{dialect}" @{@code{MALE}|@code{FEMALE}@} @var{age}
+@end example
+
+Example usage:
+@example
+LIST VOICES festival
+203-"kal" en nil MALE 30
+203-"ked" en nil MALE 30
+203-"czech_ph" cs nil MALE 30
+203-"el_diphone" es nil MALE 48
+203-"lp_diphone" it nil MALE 30
+203-"pc_diphone" it nil FEMALE 30
+203-OK LIST OF VOICES SENT
+@end example
+@end table
+
+@node Speech Synthesis Commands (text protocol)
+@subsection Speech Synthesis Commands (text protocol)
+
+Commands listed in this section are actual request for synthesis (and
+possibly playback) of a textual or sound message.
+
+@table @code
+@anchor{SAY TEXT}
+@item SAY TEXT @var{format}
+
+Start receiving a text message and synthesize it.  After sending a
+reply to the command, the server waits for the text of the message.
+The text can spread over any number of lines and is finished by an end
+of line marker followed by the line containing the single character
+@code{.} (dot).  Thus the complete character sequence closing the
+input text is @code{CR LF . CR LF}.  If any line within the sent text
+starts with a dot, an extra dot is prepended before it.
+
+During reception of the text message, server doesn't send responses
+for the lines sent.  The response line is sent only immediately after
+the @code{SPEAK} command and after receiving the closing dot
+line. Server can start input processing or speech synthesis as soon as
+a sufficient amount of the text arrives; it generally needn't (but
+may) wait until the end of data marker is received.
+
+There is no explicit upper limit on the size of the text, but the
+server administrator may set one in the configuration or the limit can
+be enforced by available system resources.  If the limit is exceeded,
+the whole text is accepted, but the excess is ignored and an error
+response code is returned after processing the final dot line.
+
+The content of the message can be either a plain text or a SSML
+(Speech Synthesis Markup Language) text according to the @var{format}
+argument. @var{format} can be either @code{SSML} or @code{PLAIN}.
+
+Position where to start synthesis is specified as a non-negative
+number @var{position} and the type of the event @var{position_type} as
+specified in TTS API with one of the following values:
+@code{MESSAGE_BEGIN}, @code{MESSAGE_END}, @code{SENTENCE_BEGIN},
+@code{SENTENCE_END}, @code{WORD_BEGIN}, @code{WORD_END}.
+
+The reply for the @code{SAY} command has the form
+
+@example
+204 OK RECEIVING DATA
+@end example
+
+and the reply to the end of text marker @code{CR LF . CR LF}
+completing the whole composed command is
+
+@example
+205-@var{message-id}
+205 OK MESSAGE RECEIVED
+@end example
+
+where @var{message-id} is a positive number representing the unique
+message identification.
+
+Example usage:
+@example
+SAY TEXT @emph{PLAIN}
+204 OK RECEIVING DATA
+Hello world!
+.
+205-67
+205 OK MESSAGE RECEIVED
+@end example
+
+@anchor{SAY TEXT FROM POSITION}
+@item SAY TEXT FROM POSITION @var{position} @var{position_type}
+
+Same as (@pxref{SAY TEXT}) except synthesis is started from a given
+event of type @var{position_type} on @var{position}
+specified as a positive number.
+
+@var{position_type} is one of @code{SENTENCE_BEGIN}, @code{SENTENCE_END},
+@code{WORD_BEGIN}, @code{WORD_END}.
+
+Example usage:
+@example
+SPEAK @emph{PLAIN} FROM POSITION @emph{2} @emph{WORD_BEGIN} 
+204 OK RECEIVING DATA
+Hello, world.
+205-68
+205 OK MESSAGE RECEIVED
+@end example
+
+@anchor{SAY TEXT FROM CHARACTER}
+@item SAY TEXT @var{format} FROM CHARACTER @var{character_position}
+
+Same as (@pxref{SAY TEXT}) except synthesis is started from a given
+character position @var{character_position} specified as a non-negative
+number.
+
+Example usage:
+@example
+SPEAK @emph{PLAIN} FROM CHARACTER @emph{7}
+204 OK RECEIVING DATA
+Hello, world.
+205-69
+205 OK MESSAGE RECEIVED
+@end example
+
+@anchor{SAY TEXT FROM INDEX MARK}
+@item SAY TEXT @var{format} FROM INDEX MARK "@var{index_mark}"
+
+Same as (@pxref{SAY TEXT}) except synthesis is started from a
+client supplied index mark @var{index_mark}.
+
+Example usage:
+@example
+SPEAK @emph{SSML} FROM INDEX_MARK "test"
+204 OK RECEIVING DATA
+<speak>
+Hello, <mark name="test">world.
+</speak>
+205-70
+205 OK MESSAGE RECEIVED
+@end example
+
+@anchor{SAY DEFERRED}
+@item SAY DEFERRED @var{message-id}
+
+Similar to @pxref{SAY TEXT} except this commands
+accepts no text.
+
+@item SAY DEFERRED @var{message-id} FROM POSITION @var{position} @var{position_type}
+
+Similar to @pxref{SAY TEXT FROM POSITION} except this commands
+accepts no text.
+
+@item SAY DEFERRED @var{message-id} FROM CHARACTER @var{character_position}
+
+Similar to @pxref{SAY TEXT FROM CHARACTER} except this commands
+accepts no text.
+
+@item SAY DEFERRED @var{message-id} FROM INDEX MARK "@var{index_mark}"
+
+Similar to @pxref{SAY TEXT FROM INDEX MARK} except this commands
+accepts no text.
+
+@anchor{SAY CHAR}
+@item SAY CHAR @var{char}
+
+Speak letter @var{char}.  @var{char} can be any character
+representable by the UTF-8 encoding. The only exception is the
+character space (@code{ }); that can't be sent directly. In this case,
+a string @code{space} must be sent instead.
+
+Example usage:
+@example
+SAY CHAR e
+206 OK CHARACTER RECEIVED
+
+SAY CHAR \
+206 OK CHARACTER RECEIVED
+
+SAY CHAR space
+206 OK CHARACTER RECEIVED
+
+SAY CHAR &
+206 OK CHARACTER RECEIVED
+@end example
+
+This command is intended to be used for speaking single letters,
+e.g. when reading a character under cursor or when spelling words.
+
+@anchor{SAY KEY}
+@item SAY KEY @var{key_name}
+
+Example usage:
+@example
+SAY KEY shift_A
+207 OK KEY RECEIVED
+@end example
+
+Accept a key identified by @var{key_name} as message.  The command is
+intended to be used for speaking keys pressed by the user.
+
+@anchor{SAY ICON}
+@item SAY ICON @var{icon_name}
+
+Accept a general sound icon identified by @var{icon_name}.
+
+Example usage:
+@example
+SAY ICON new-line
+208 OK ICON RECEIVED
+@end example
+
+@end table
+
+@node Speech Control Commands (text protocol)
+@subsection Speech Control Commands (text protocol)
+
+@table @code
+@item CANCEL
+
+Immediately stop synthesis and audio output of the current message,
+throw away all the data about this message and prepare the synthesizer
+to receive a new message.
+
+Example usage:
+@example
+CANCEL
+209 OK CANCELED
+@end example
+
+@item DEFER
+
+If synthesis and/or audio output are in progress, immediately stop
+them. Keep the original text and as much data (possibly also audio) as
+is needed to resume the message later via @code{SAY DEFERRED}.
+
+Reply has the following form
+@example
+209-@var{message_id}
+209 OK DEFERRED
+@end example
+
+where @var{message_id} is a unique positive number as defined in
+TTS API.
+
+
+Example usage:
+@example
+DEFER
+209-47
+209 OK DEFERRED
+@end example
+
+@item DISCARD @var{message_id}
+
+Discards a previously deffered message.
+
+Example usage:
+@example
+DISCARD 47
+210 OK MESSAGE DISCARDED
+@end example
+
+@end table
+
+@node Parameter Settings (text protocol)
+@subsection Parameter Settings (text protocol)
+
+All settings except for driver selection only have effect
+until the driver is changed.
+
+Success return codes for all SET commands are
+@example
+211 OK PARAMETER SET
+@end example
+
+@menu
+* Driver Selection and Parameters (text protocol)::  
+* Voice Selection (text protocol)::  
+* Prosody Parameters (text protocol)::  
+* Style Parameters (text protocol)::  
+* Dictionaries::                
+* Audio Settings::              
+@end menu
+
+@node Driver Selection and Parameters (text protocol)
+@subsubsection Driver Selection and Parameters (text protocol)
+
+@table @code
+@item SET DRIVER @var{driver_id}
+Set the synthesis driver.
+
+Example usage:
+@example
+SET DRIVER festival
+211 OK PARAMETER SET
+@end example
+@end table
+
+@node Voice Selection (text protocol)
+@subsubsection Voice Selection (text protocol)
+
+@table @code
+
+@item SET VOICE BY NAME "@var{voice_name}"
+Set voice by name for the synthesis driver in use.
+
+Example usage:
+@example
+SET VOICE BY NAME "kal"
+211 OK PARAMETER SET
+@end example
+
+@item SET VOICE BY PROPERTIES @var{language} "@var{dialect}" @var{gender} @var{age} @var{variant}
+Set voice by the given properties.
+
+Example usage:
+@example
+SET VOICE BY PROPERTIES cs nil FEMALE nil 0
+211 OK PARAMETER SET
+@end example
+
+@item GET CURRENT VOICE
+
+Return information about the currently used voice. The output
+contains exactly two lines of this form:
+
+@example
+212-"@var{name}" @var{language} "@var{dialect}" @{@code{MALE}|@code{FEMALE}@} @var{age}
+212 OK VOICE DESCRIPTION SENT
+@end example
+
+Example usage:
+@example
+GET CURRENT VOICE
+212-"kal" en nil MALE 30
+203-OK LIST OF VOICES SENT
+@end example
+
+@end table
+
+@node Prosody Parameters (text protocol)
+@subsubsection Prosody Parameters (text protocol)
+
+@table @code
+
+@anchor{SET RATE}
+@item SET RATE @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{rate}
+
+Set relative or absolute rate. @var{rate} is a positive or negative
+number representing percents for relative changes, it is a positive
+number representing words per minute for absolute changes.
+
+Example usage
+@example
+SET RATE RELATIVE +300
+211 OK PARAMETER SET
+
+SET RATE RELATIVE -20
+211 OK PARAMETER SET
+
+SET RATE ABSOLUTE 150
+211 OK PARAMETER SET
+@end example
+
+@item GET RATE ABSOLUTE DEFAULT
+
+Get absolute value of default rate for the voice in use.
+
+Reply is in the form:
+@example
+213-@var{absolute_rate}
+213-OK ABSOLUTE RATE IN WPM SENT
+@end example
+
+where @var{absolute_rate} is a positive number representing
+the rate in words per minute.
+
+@item SET PITCH @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{pitch}
+
+Set relative or absolute rate. @var{pitch} is a positive or negative
+number representing percents for relative changes, it is a positive
+number representing Hertzs for absolute changes.
+
+Examples are analogous to those for @pxref{SET RATE}
+
+@item GET PITCH ABSOLUTE DEFAULT
+
+Get absolute value of default pitch for the voice in use.
+
+Reply is in the form:
+@example
+214-@var{pitch}
+214-OK ABSOLUTE PITCH IN HZ SENT
+@end example
+
+where @var{pitch} is a positive number representing
+the pitch in Hertzs.
+
+@item SET PITCH_RANGE @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{pitch_range}
+
+Set relative or absolute pitch range. @var{pitch_range} is a positive or
+negative number representing percents for relative changes, it is a
+positive number representing Hertzs absolute changes.
+
+Examples are analogous to those for @pxref{SET RATE}.
+
+@item SET VOLUME @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{volume}
+
+Set relative or absolute volume. @var{volume} is a positive or negative
+number representing percents for relative changes, it is a positive
+number between 0 (silence) and 100 (max volume) for absolute changes.
+
+Examples are analogous to those for @pxref{SET RATE}.
+
+@item GET VOLUME ABSOLUTE DEFAULT
+
+Get absolute value of default volume for the voice in use.
+
+Reply is in the form:
+@example
+215-@var{pitch}
+215-OK ABSOLUTE PITCH IN HZ SENT
+@end example
+
+where @var{volume} is a positive number.
+
+@end table
+
+@node Style Parameters (text protocol)
+@subsubsection Style Parameters (text protocol)
+
+@table @code
+@item SET PUNCTUATION MODE @var{punctuation-mode}
+
+Set punctuation mode to @var{punctuation-mode}. Allowed
+values are @code{NONE}, @code{ALL}, @code{SOME}.
+
+Example usage:
+@example
+SET PUNCTUATION MODE ALL
+211 OK PARAMETER SET
+@end example
+
+@item SET PUNCTUATION DETAIL @var{detail}
+
+Set the detail for punctuation reading when punctuation mode
+is set to @code{SOME}. Detail is a string enumerating all
+punctuation characters that should be explicitly pronounced.
+The string must not contain any whitespace characters.
+
+Example usage:
+@example
+SET PUNCTUATION DETAIL ?!.#
+211 OK PARAMETER SET
+@end example
+
+@item SET CAPITAL LETTERS MODE @var{cap-let-mode}
+
+Set capital letters reading mode. Allowed values
+for the @var{cap-let-mode} parameter are: @code{NO},
+@code{SPELLING}, @code{ICON}, @code{PITCH}.
+
+Example usage:
+@example
+SET CAPITAL LETTERS MODE ICON
+211 OK PARAMETER SET
+@end example
+
+@item SET NUMBER GROUPING @var{grouping}
+
+Set grouping of digits for reading numbers. The parameter
+@var{grouping} is a non-negative number.
+
+@end table
+
+@node Dictionaries
+@subsubsection Dictionaries
+
+@node Audio Settings
+@subsubsection Audio Settings
+
+@table @code
+
+@item SET AUDIO OUTPUT @var{method}
+
+Sets audio output method. Available values of the @var{method}
+argument are @code{PLAYBACK} and @code{RETRIEVAL}.
+
+Example usage:
+@example
+SET AUDIO OUTPUT PLAYBACK
+211 OK PARAMETER SET
+@end example
+
+@item SET AUDIO RETRIEVAL DESTINATION @var{host} @var{port}
+
+Sets destination for audio retrieval. @var{host} is the IP address of
+the machine where audio data should be delivered.  The IP address is
+written as groups of three digits separated by dots. @var{port}
+is a positive number of the desired port.
+
+Example usage:
+@example
+SET AUDIO RETRIEVAL DESTINATION 127.0.0.1 1315
+211 OK PARAMETER SET
+@end example
+
+@end table
+
+@node Event Callbacks (text protocol)
+@subsection Event Callbacks (text protocol)
+
+Event are reported on the main connection asynchronously and only if
+the audio output method is set to @code{PLAYBACK}.  (If output method
+is set to @code{RETRIEVAL}, information about events reached is sent
+together with the audio data on the appropriate side channel).
+
+Asynchronous nature of the event reports means such messages in the
+protocol are not a result of a command being sent by the client and
+may come at any time after a request for speaking (@code{SAY}) is
+sent.  Such notifications can be sent even the @code{CANCEL} or
+@code{DEFER} command is issued.
+
+Information about each event is sent in this form:
+
+@itemize
+@item Message Events
+
+@example
+701-@var{type} @var{n} @var{pos_text}
+701 MESSAGE EVENT
+@end example
+
+@item Sentence and Word Events
+
+@example
+702-@var{type} @var{n} @var{pos_text}
+702 SENTENCE OR WORD EVENT
+@end example
+
+@item Index Mark Events
+
+@example
+703-@var{event-type} "@var{name}" @var{pos-text}
+703 EVENT SENT
+@end example
+@end itemize
+
+the exact meaning and format of the parameters is explained in TTS API
+specifications under section Audio Retrieval. 
+
+@node Other Commands (text protocol)
+@subsection Other Commands (text protocol)
+
+@table @code
+@item QUIT
+Close the connection. No reply is sent and the connection is closed on
+server side.
+
+Example usage:
+@example
+QUIT
+@end example
+
+@item HELP
+Print a short list of all available commands as a multi-line message.
+
+The following format is used for reply:
+@example
+800-line 1
+800-line 2
+800 HELP SENT
+@end example
+
+Example usage:
+@example
+HELP
+800-SAY
+800-[...]
+800-CANCEL
+800-[...]
+800-HELP
+800 HELP SENT
+@end example
+@end table
+
+
+@page
+@node Python TTS API
+@section Python TTS API
+
+Python API is documented through docstrings and embedded comments.
+Please see @file{api/python/ttsapi.py} in the source tree.
+
+@bye
