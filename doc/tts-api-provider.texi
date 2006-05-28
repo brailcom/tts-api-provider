@@ -197,7 +197,6 @@ implementation burden on the applications.
 @node Drivers
 @section Drivers
 
-
 @heading Functionality
 
 @itemize
