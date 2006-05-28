@@ -1,4 +1,4 @@
-\input texinfo   @c -*-texinfo-*-
+sci\input texinfo   @c -*-texinfo-*-
 @c %**start of header
 @setfilename tts-api-provider.info
 @settitle TTS API Provider
@@ -24,7 +24,6 @@ General Public License''
 @end copying
 
 @c @set version 2006-03-09
-
 
 @c Directory, keywords
 @dircategory Sound
