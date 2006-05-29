@@ -224,7 +224,6 @@ standard input and writing to their standard output.
 @node Driver Template Library
 @section Driver Template Library
 
-
 @heading Functionality:
 @itemize
 @item take care of IPC communication (TTS API + audio socket)
