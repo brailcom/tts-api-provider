@@ -161,7 +161,6 @@ and its debugging will be easier for the developers.
 Communication can be led over network.
 @end itemize
 
-
 TTS API Provider communication layer will provide a TCP version of TTS
 API. This TCP inter-process communication will be wrapped in
 convenience libraries (4) for easy use in the application. Care will
