@@ -321,7 +321,7 @@ can be commands having no arguments.
 All input and output lines must be ended with a pair of
 carriage return and line feed characters, in that order.
 
-An SSIP connection is preferably closed by issuing the @code{QUIT}
+A connection is preferably closed by issuing the @code{QUIT}
 command, see @ref{Other Commands (text protocol)}.
 
 The protocol defined here is synchronous --- you send commands and
@@ -355,11 +355,11 @@ action in a human readable form.
 @node Return Codes
 @subsection Return Codes
 
-Each line of the SSIP output starts with a three-digit numeric code of
+Each line of the output starts with a three-digit numeric code of
 the form @var{NXX} where @var{N} determines the result group and
 @var{xx} denotes the finer classification of the result.
 
-SSIP defines the following result groups:
+The following result groups are defined:
 
 @table @code
 @item 1xx
