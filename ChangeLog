@@ -1,3 +1,19 @@
+2006-07-03  Hynek Hanke  <hanke@chopin>
+
+	* src/api/python/ttsapi.py: Implementation of python->text protocol
+	interface.
+
+	* src/api/python/tcp_connection.py: Moved from tcp_connection.py.
+	
+	* src/api/python/tcp_connection.py: Moved to connection.py.
+
+	* doc/tts-api-provider.texi (Driver Discovery (text protocol)):
+	Definition of reply changed.Groups of capabilities forming sets
+	are now written as sets.
+
+	* Minor rewording of some commands and attributes to sound more
+	natural (set rate relative -> set relative rate)
+
 2006-05-27  Hynek Hanke  <hanke@chopin>
 
 	* Initial version containing first documentation including
