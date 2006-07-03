@@ -439,63 +439,51 @@ LIST DRIVERS
 
 Return information about the capabilities of the given driver.
 
-The reply takes the following form. Each of the lines must
-be present in the following order and carry one of the specified values.
+The reply takes the following form. Each of the lines must be present
+in the following order and carry one of the specified values.  @{a|b@}
+means either a or b (but not both) is possible, while [a,b,c] means a,
+b, c or any subset where items are separated by spaces.
 
 @example
 202-can_list_voices @{@code{true}|@code{false}@}
 202-can_set_voice_by_properties @{@code{true}|@code{false}@}
 202-can_get_current_voice @{@code{true}|@code{false}@}    
-202-can_set_rate_relative @{@code{true}|@code{false}@}
-202-can_set_rate_absolute @{@code{true}|@code{false}@}
-202-can_get_rate_default @{@code{true}|@code{false}@}
-202-can_set_pitch_relative @{@code{true}|@code{false}@}
-202-can_set_pitch_absolute @{@code{true}|@code{false}@}
-202-can_get_pitch_default @{@code{true}|@code{false}@}
-202-can_set_pitch_range_relative @{@code{true}|@code{false}@}
-202-can_set_pitch_range_absolute @{@code{true}|@code{false}@}
+202-rate_settings [@code{absolute}, @code{relative}]
+202-can_get_default_rate @{@code{true}|@code{false}@}
+202-pitch_settings [@code{absolute}, @code{relative}]
+202-can_get_default_pitch @{@code{true}|@code{false}@}
+202-pitch_range_settings [@code{absolute}, @code{relative}]
 202-can_get_pitch_range_default @{@code{true}|@code{false}@}
-202-can_set_volume_relative @{@code{true}|@code{false}@}
-202-can_set_volume_absolute @{@code{true}|@code{false}@}
+202-volume_settings [@code{absolute}, @code{relative}]
 202-can_get_volume_default @{@code{true}|@code{false}@}
-202-can_set_punctuation_mode_all @{@code{true}|@code{false}@}
-202-can_set_punctuation_mode_none @{@code{true}|@code{false}@}
-202-can_set_punctuation_mode_some @{@code{true}|@code{false}@}
+202-punctuation_modes [@code{all}, @code{none}, @code{some}]
 202-can_set_punctuation_detail @{@code{true}|@code{false}@}
-202-can_set_capital_letters_mode_spelling @{@code{true}|@code{false}@}
-202-can_set_capital_letters_mode_icon @{@code{true}|@code{false}@}
-202-can_set_capital_letters_mode_pitch @{@code{true}|@code{false}@}
+202-capital_letters_modes [@code{spelling}, @code{icon}, @code{pitch}]
 202-can_set_number_grouping @{@code{true}|@code{false}@}
 202-can_say_text_from_position @{@code{true}|@code{false}@}
 202-can_say_char @{@code{true}|@code{false}@}
 202-can_say_key @{@code{true}|@code{false}@}
 202-can_say_icon @{@code{true}|@code{false}@}
 202-can_set_dictionary @{@code{true}|@code{false}@}
-202-can_retrieve_audio @{@code{true}|@code{false}@}
-202-can_play_audio @{@code{true}|@code{false}@}
-202-can_report_events_by_sentences @{@code{true}|@code{false}@}
-202-can_report_events_by_words @{@code{true}|@code{false}@}
-202-can_report_custom_index_marks @{@code{true}|@code{false}@}
-202-honors_performance_guidelines @{@code{0}|@code{1}|@code{2}@}
+202-audio_methods [@code{playback}, @code{retrieval}]
+202-events [@code{by_sentences}, @code{by_words}, @code{by_index_marks}]
+202-performance_level @{@code{none}|@code{good}|@code{excelent}@}
 202-can_defer_message @{@code{true}|@code{false}@}
 202-can_parse_ssml @{@code{true}|@code{false}@}
 202-supports_multilingual_utterances @{@code{true}|@code{false}@}
 202 OK DRIVER CAPABILITIES SENT
 @end example
 
-Example of usage (incomplete reply)
+Example of usage (incomplete reply indicated by '[...]')
 
 @example
 DRIVER CAPABILITIES festival
 202-can_list_voices @code{true}
 202-can_set_voice_by_properties @code{true}
 202-can_get_current_voice @code{true}    
-202-can_set_rate_relative @code{true}
-202-can_set_rate_absolute @code{true}
-202-can_get_rate_default @code{true}
-202-can_set_pitch_relative @code{true}
+202-rate_settings @code{relative} @code{absolute}
 [...]
-202-honors_performance_guidelines @code{2}
+202-honors_performance_guidelines @code{excelent}
 202-can_defer_message @code{false}
 202-can_parse_ssml @code{true}
 202-supports_multilingual_utterances @code{false}
@@ -857,7 +845,7 @@ GET CURRENT VOICE
 @table @code
 
 @anchor{SET RATE}
-@item SET RATE @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{rate}
+@item SET @{@emph{RELATIVE}|@emph{ABSOLUTE}@} RATE @var{rate}
 
 Set relative or absolute rate. @var{rate} is a positive or negative
 number representing percents for relative changes, it is a positive
@@ -865,17 +853,17 @@ number representing words per minute for absolute changes.
 
 Example usage
 @example
-SET RATE RELATIVE +300
+SET RELATIVE RATE +300
 211 OK PARAMETER SET
 
-SET RATE RELATIVE -20
+SET RELATIVE RATE -20
 211 OK PARAMETER SET
 
-SET RATE ABSOLUTE 150
+SET RELATIVE RATE 150
 211 OK PARAMETER SET
 @end example
 
-@item GET RATE ABSOLUTE DEFAULT
+@item GET DEFAULT ABSOLUTE RATE
 
 Get absolute value of default rate for the voice in use.
 
@@ -888,7 +876,7 @@ Reply is in the form:
 where @var{absolute_rate} is a positive number representing
 the rate in words per minute.
 
-@item SET PITCH @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{pitch}
+@item SET @{@emph{RELATIVE}|@emph{ABSOLUTE}@} PITCH @var{pitch}
 
 Set relative or absolute rate. @var{pitch} is a positive or negative
 number representing percents for relative changes, it is a positive
@@ -896,9 +884,9 @@ number representing Hertzs for absolute changes.
 
 Examples are analogous to those for @pxref{SET RATE}
 
-@item GET PITCH ABSOLUTE DEFAULT
+@item GET DEFAULT ABSOLUTE PITCH
 
-Get absolute value of default pitch for the voice in use.
+Get default value of absolute pitch for the voice in use.
 
 Reply is in the form:
 @example
@@ -909,7 +897,7 @@ Reply is in the form:
 where @var{pitch} is a positive number representing
 the pitch in Hertzs.
 
-@item SET PITCH_RANGE @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{pitch_range}
+@item SET @{@emph{RELATIVE}|@emph{ABSOLUTE}@} PITCH_RANGE @var{pitch_range}
 
 Set relative or absolute pitch range. @var{pitch_range} is a positive or
 negative number representing percents for relative changes, it is a
@@ -917,7 +905,7 @@ positive number representing Hertzs absolute changes.
 
 Examples are analogous to those for @pxref{SET RATE}.
 
-@item SET VOLUME @{@emph{RELATIVE}|@emph{ABSOLUTE}@} @var{volume}
+@item SET @{@emph{RELATIVE}|@emph{ABSOLUTE}@} VOLUME @var{volume}
 
 Set relative or absolute volume. @var{volume} is a positive or negative
 number representing percents for relative changes, it is a positive
@@ -925,14 +913,14 @@ number between 0 (silence) and 100 (max volume) for absolute changes.
 
 Examples are analogous to those for @pxref{SET RATE}.
 
-@item GET VOLUME ABSOLUTE DEFAULT
+@item GET DEFAULT ABSOLUTE VOLUME
 
 Get absolute value of default volume for the voice in use.
 
 Reply is in the form:
 @example
 215-@var{pitch}
-215-OK ABSOLUTE PITCH IN HZ SENT
+215-OK ABSOLUTE VOLUME IN DB SENT
 @end example
 
 where @var{volume} is a positive number.
