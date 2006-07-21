@@ -1,4 +1,4 @@
-sci\input texinfo   @c -*-texinfo-*-
+\input texinfo   @c -*-texinfo-*-
 @c %**start of header
 @setfilename tts-api-provider.info
 @settitle TTS API Provider
@@ -64,6 +64,44 @@ General Public License''
 @node Introduction
 @chapter Introduction
 
+TTS API Provider is a system service providing applications with
+low-level access to various synthesizers via TTS API (See TTS API
+specification, @href{http://www.freebsoft.org/tts-api}). It manages
+the synthesizers available on the system and provides a unified
+interface to them.
+
+This API was developed in cooperation between the biggest Free
+Software accessibility projects at that time (Gnome Accessibility
+Project, KDE Accessibility, Free-b-Soft and others). It is made
+available publicly and separately in the hope to unify our efforts,
+revise the speech output architecture and put it on solid, well
+designed, well documented and de-facto standardized grounds. Its
+target is on accessibility, however we believe it is powerful enough
+to be useful in other areas too where speech synthesis is useful.
+
+Our publishing of the API and making it available on the system for
+easy use should however not be seen as an encouragement for developers
+to use this low-level API directly! Most applications, especially
+accessibility applications, should never contact this low-level API
+directly. They should use a high-level API such as one of the Speech
+Dispatchers APIs, Gnome Speech API or KTTS API doing the necessary
+coordination of messages from various applications. To put it simple,
+one should only use TTS API Provider directly and fully if he is sure
+he is authorized to take complete control over all speech synthesis
+audio output on the system. As mentioned, this is mostly never the
+case of ordinary applications. In the audio world, the issue could be
+compared to applications taking control over the /dev/dsp device
+(under OSS) or intentionally bypassing the mixer (under ALSA) and thus
+blocking others. @footnote{While sound output for various concurrent
+speech streams is not a problem any longer, if it is done without any
+attempt at coordination and control, the result will likely be that
+the user can't understand any of the streams.}  An exception to this
+rule are applications on embedded systems, highly specialized
+applications like telephony servers, speech synthesis research and
+development applications and applications who only retrieve the
+synthesized audio samples but do not play them on the sound card
+(e.g. a text2wav converter).  If in doubt, please contact us.
+
 @node Design
 @chapter Design
 
@@ -72,9 +110,8 @@ TTS API Provider is composed of four independent parts.  The
 applications with speech synthesizers and doing the necessary
 emulations, the various @emph{drivers} that translate the APIs of the
 synthesizers into TTS API, @emph{driver template library} to help with
-developement of drivers and @emph{convenience libraries for
-applications} which provide easy access to TTS API from various
-languages.
+developement of drivers and @emph{convenience libraries} which provide
+easy access to TTS API from various languages.
 
 @menu
 * General Design::              
@@ -100,10 +137,10 @@ Provider should not have to take care of directly handling audio
 devices and doing its own audio output. This is a task unrelated to
 the Text-to-Speech process, necessary for many other applications
 outside the domain of speech synthesis and accessibility, and as such
-best be left to an independent component. Only because currently we do
-not know of any general Free Software audio component that could
-handle our needs, we will temporarily provide our own basic audio
-output.
+would best be left to an independent component. Only because currently
+we do not know of any general Free Software audio component that could
+handle our needs, we will temporarily continue to provide our own
+basic audio output.
 
 @image{figures/architecture-future,155mm,,TTS API Provider architecture in the future}
 
@@ -165,8 +202,8 @@ TTS API Provider communication layer will provide a TCP version of TTS
 API. This TCP inter-process communication will be wrapped in
 convenience libraries (4) for easy use in the application. Care will
 be taken to avoid dependency on this particular communication method
-so that in the future, other IPC methods like DBUS can be added if
-necessary.
+so that in the future, other IPC methods like Corba or DBUS can be
+added if necessary.
 
 TTS API Provider will automatically launch available engine
 drivers. In order to achieve context independency of clients, to allow
@@ -218,8 +255,9 @@ for legal reasons and for the reasons of stability.
 Drivers can be built using the driver template library (3),
 although this is not necessary.
 
-Drivers will communicate through pipes, reading from their
-standard input and writing to their standard output.
+Drivers will communicate in the same TCP version of TTS API through
+pipes, reading from their standard input and writing to their standard
+output.
 
 @node Driver Template Library
 @section Driver Template Library
@@ -244,7 +282,6 @@ synthesizer APIs easier
 @node Convenience Libraries for Applications
 @section Convenience Libraries for Applications
 
-
 @heading Functionality
 
 @itemize
@@ -257,7 +294,7 @@ care of	IPC communication
 @itemize @w{}
 @item @emph{License}: GNU LGPL
 @item @emph{Language}: C, Python
-@item @emph{Dependencies}: libc
+@item @emph{Dependencies}: libc, Python
 @end itemize
 
 @node TTS API Implementations
@@ -1091,6 +1128,6 @@ HELP
 @section Python TTS API
 
 Python API is documented through docstrings and embedded comments.
-Please see @file{api/python/ttsapi.py} in the source tree.
+Please see @file{src/ttsapi/client.py} in the source tree.
 
 @bye
