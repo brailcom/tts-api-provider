@@ -1,3 +1,7 @@
+2006-07-21  Hynek Hanke  <hanke@brailcom.org>
+
+	* doc/tts-api-provider.texi (Introduction): Newly written.
+
 2006-07-03  Hynek Hanke  <hanke@chopin>
 
 	* src/api/python/ttsapi.py: Implementation of python->text protocol
