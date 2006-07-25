@@ -1,3 +1,7 @@
+2006-07-25  Hynek Hanke  <hanke@brailcom.org>
+
+	* Modules structure changed.
+
 2006-07-21  Hynek Hanke  <hanke@brailcom.org>
 
 	* doc/tts-api-provider.texi (Introduction): Newly written.
