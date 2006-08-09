@@ -15,17 +15,17 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this package; see the file COPYING.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
-# Boston, MA 02111-1307, USA.
+# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.1 2006-07-25 12:56:13 hanke Exp $
+# $Id: provider.py,v 1.2 2006-08-09 12:06:12 hanke Exp $
  
 """TTS API Provider core logic"""
 
 import sys
-
 from ttsapi.structures import *
-
+from ttsapi.errors import *
+#from logs import log
 
 class Provider(object):
     """TTS API implementation class (main process)
@@ -41,7 +41,7 @@ class Provider(object):
         """Return a list of DriverDescription objects containing
         information about the available drivers
         """
-        pass
+        raise ErrorNotSupportedByServer
         
     def driver_capabilities (self, driver_id):
         """Return a DriverCapabilities object for the
