@@ -15,10 +15,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this package; see the file COPYING.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
-# Boston, MA 02111-1307, USA.
+# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.1 2006-07-25 12:56:25 hanke Exp $
+# $Id: client.py,v 1.2 2006-08-09 12:05:51 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
