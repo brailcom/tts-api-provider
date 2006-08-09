@@ -1,7 +1,7 @@
 #
 # tts-api.py - Python implementation of TTS API
 #   
-# Copyright (C) 2001, 2002, 2003 Brailcom, o.p.s.
+# Copyright (C) 2006 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -15,10 +15,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this package; see the file COPYING.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
-# Boston, MA 02111-1307, USA.
+# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.1 2006-07-25 12:56:29 hanke Exp $
+# $Id: connection.py,v 1.2 2006-08-09 12:05:45 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -49,9 +49,10 @@ class Connection(object):
     END_OF_DATA_ESCAPED = NEWLINE + END_OF_DATA_ESCAPED_SINGLE + NEWLINE
     "Escaping for END_OF_DATA"    
 
-    def __init__ (self):
+    def __init__ (self, logger=None):
         self._data_transfer = False
         self._server_side_buf = ''
+        self.logger = logger
 
     def _read_line(self):
         """Read one whole line from the communication channel.
@@ -238,9 +239,14 @@ class SocketConnection(Connection):
     _buffer = ''
     _data_transfer = False
 
-    def __init__(self, host="127.0.0.1", port=6570, socket=None):
+    def __init__(self, host="127.0.0.1", port=6570, socket=None, logger=None):
         """Init a connection to the server"""
+        
+        #Connection.__init__(self, logger=logger)
+        self.logger = logger
+        
         if socket==None:
+            log.debug()
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._socket.connect((socket.gethostbyname(host), port))
         else:
@@ -259,6 +265,8 @@ class SocketConnection(Connection):
             pointer = self._buffer.find(self.NEWLINE)
         line = self._buffer[:pointer]
         self._buffer = self._buffer[pointer+len(self.NEWLINE):]
+        if self.logger:
+            self.logger.debug("Received over socket: %s",  line)
         return line
 
     def _write(self, data):
@@ -268,10 +276,14 @@ class SocketConnection(Connection):
         necessary newlines and carriage return characters."""
         
         self._socket.send(data)
-
+        if self.logger: 
+            self.logger.debug("Sent over socket: %s",  data)
+        
     def close (self):
         """Close the connection."""
-        self._socket.close()
+        socket.socket.close(self._socket)
+        if self.logger:
+            self.logger.debug("Socket connection closed")
 
 class PipeConnection(Connection):
     """Connection through pipes"""
