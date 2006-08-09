@@ -313,7 +313,7 @@ This section documents the text protocol in use for communication
 over sockets, pipes and other channels where serialized textual
 protocol is a convenient interface.
 
-In th protocol description bellow, accent is put on form.  The exact
+In the protocol description bellow, accent is put on form.  The exact
 expected behavior of all the commands and the exact meaning of the
 arguments is described in TTS API specifications available from
 @url{http://www.freebsoft.org/doc/tts-api/} and is not repeated in
@@ -408,16 +408,34 @@ Operation was completely successful.
 @item 3xx
 Server side error, problem on the server side or in the driver.
 @table @code
-@item 301
+@item 300 UNKNOWN ERROR
+Unknown error.
+@item 301 NOT SUPPORTED BY DRIVER
 Not supported by the driver.
-@item 302
+@item 302 NOT SUPPORTED BY SERVER
+Not supported by the server (implementation incomplete).
+@item 303 DRIVER ACCESS DENIED
 Cannot access driver.
+@item 304 INTERNAL ERROR
+Internal error in server.
 @end table
-@item 4xx
-Client error, invalid arguments or parameters received.
 
-@item 5xx
-Client error, invalid command syntax, unparseable input.
+@item 4xx
+Client error, invalid arguments or parameters received,
+invalid commands syntax, unparseable input.
+@table @code
+
+@item 400 INVALID COMMAND
+Invalid command, wrong formating of parameters etc.
+@item 401 INVALID ARGUMENT
+Invalid command argument value given
+@item 402 MISSING ARGUMENT
+Missing mandatory command argument.
+@item 403 INVALID PARAMETER
+Trying to set invalid parameter.
+@item 404 ENCODING ERROR
+Invalid UTF-8 encoding.
+@end table
 
 @item 7xx
 Events and index marks notifications.
@@ -470,7 +488,7 @@ Example of usage:
 LIST DRIVERS
 201-festival "Festival Speech Synthesis System" "1.94beta" "1.2"
 201-flite "Festival Lite" "1.2" "1.1"
-201 OK LIST OF DRIVERS SENT
+201 OK LIST SENT
 @end example
 
 @item DRIVER CAPABILITIES @var{driver-id}
@@ -548,13 +566,13 @@ The reply contains zero or more lines of the following form.
 Example usage:
 @example
 LIST VOICES festival
-203-"kal" en nil MALE 30
-203-"ked" en nil MALE 30
-203-"czech_ph" cs nil MALE 30
-203-"el_diphone" es nil MALE 48
-203-"lp_diphone" it nil MALE 30
-203-"pc_diphone" it nil FEMALE 30
-203-OK LIST OF VOICES SENT
+201-"kal" en nil MALE 30
+201-"ked" en nil MALE 30
+201-"czech_ph" cs nil MALE 30
+201-"el_diphone" es nil MALE 48
+201-"lp_diphone" it nil MALE 30
+201-"pc_diphone" it nil FEMALE 30
+201-OK LIST SENT
 @end example
 @end table
 
@@ -609,8 +627,8 @@ and the reply to the end of text marker @code{CR LF . CR LF}
 completing the whole composed command is
 
 @example
-205-@var{message-id}
-205 OK MESSAGE RECEIVED
+203-@var{message-id}
+204 OK MESSAGE RECEIVED
 @end example
 
 where @var{message-id} is a positive number representing the unique
@@ -619,11 +637,11 @@ message identification.
 Example usage:
 @example
 SAY TEXT @emph{PLAIN}
-204 OK RECEIVING DATA
+203 OK RECEIVING DATA
 Hello world!
 .
-205-67
-205 OK MESSAGE RECEIVED
+204-67
+204 OK MESSAGE RECEIVED
 @end example
 
 @anchor{SAY TEXT FROM POSITION}
@@ -639,10 +657,10 @@ specified as a positive number.
 Example usage:
 @example
 SPEAK @emph{PLAIN} FROM POSITION @emph{2} @emph{WORD_BEGIN} 
-204 OK RECEIVING DATA
+203 OK RECEIVING DATA
 Hello, world.
-205-68
-205 OK MESSAGE RECEIVED
+204-68
+204 OK MESSAGE RECEIVED
 @end example
 
 @anchor{SAY TEXT FROM CHARACTER}
@@ -655,10 +673,10 @@ number.
 Example usage:
 @example
 SPEAK @emph{PLAIN} FROM CHARACTER @emph{7}
-204 OK RECEIVING DATA
+203 OK RECEIVING DATA
 Hello, world.
-205-69
-205 OK MESSAGE RECEIVED
+204-69
+204 OK MESSAGE RECEIVED
 @end example
 
 @anchor{SAY TEXT FROM INDEX MARK}
@@ -670,12 +688,12 @@ client supplied index mark @var{index_mark}.
 Example usage:
 @example
 SPEAK @emph{SSML} FROM INDEX_MARK "test"
-204 OK RECEIVING DATA
+203 OK RECEIVING DATA
 <speak>
 Hello, <mark name="test">world.
 </speak>
-205-70
-205 OK MESSAGE RECEIVED
+204-70
+204 OK MESSAGE RECEIVED
 @end example
 
 @anchor{SAY DEFERRED}
@@ -710,16 +728,20 @@ a string @code{space} must be sent instead.
 Example usage:
 @example
 SAY CHAR e
-206 OK CHARACTER RECEIVED
+204-71
+204 OK MESSAGE RECEIVED
 
 SAY CHAR \
-206 OK CHARACTER RECEIVED
+204-72
+204 OK MESSAGE RECEIVED
 
 SAY CHAR space
-206 OK CHARACTER RECEIVED
+204-73
+204 OK MESSAGE RECEIVED
 
 SAY CHAR &
-206 OK CHARACTER RECEIVED
+204-74
+204 OK MESSAGE RECEIVED
 @end example
 
 This command is intended to be used for speaking single letters,
@@ -731,7 +753,8 @@ e.g. when reading a character under cursor or when spelling words.
 Example usage:
 @example
 SAY KEY shift_A
-207 OK KEY RECEIVED
+204-75
+204 OK MESSAGE RECEIVED
 @end example
 
 Accept a key identified by @var{key_name} as message.  The command is
@@ -745,7 +768,8 @@ Accept a general sound icon identified by @var{icon_name}.
 Example usage:
 @example
 SAY ICON new-line
-208 OK ICON RECEIVED
+204-76
+204 OK MESSAGE RECEIVED
 @end example
 
 @end table
