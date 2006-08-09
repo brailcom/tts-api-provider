@@ -1,3 +1,41 @@
+2006-08-09  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/ttsapi/structures.py: Correct FSF address.
+
+	* src/ttsapi/server.py (ClientGone): New exception.
+	(TCPConnection._quit): New method.
+	(TCPConnection.__init__): New parameter 'logger'. Log
+	communication.
+	(TCPConnection.__init__): Typos in self.commands_map.
+	(TCPConnection.__init__): self.errors_map : new variable.
+	(TCPConnection._cmd_matches): Docstring.
+	(TCPConnection._report_error): New method.
+	(TCPConnection.process_input): Exception handling through
+	self.errors_map.
+
+	* src/ttsapi/errors.py: New file.
+
+	* src/ttsapi/connection.py (SocketConnection.__init__): Added the 'logger' parameter and logging of communication.
+
+	* src/ttsapi/client.py: Correct FSF address.
+
+	* src/ttsapi/__init__.py: New file.
+
+	* src/provider/server.py: Use the configuration class.
+	(serve_client): Implementation over sockets.
+	(main): Initialize logging, bind socket, wait for
+	connections and start new threads.
+
+	* src/provider/provider.py: Import errors.
+
+	*  src/provider/configuration.py: New file.
+
+	* doc/tts-api-provider.texi (Speech Synthesis Commands (text protocol)): Error codes changed.
+
+2006-07-26  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/ttsapi/errors.py: New file.
+
 2006-07-25  Hynek Hanke  <hanke@brailcom.org>
 
 	* Modules structure changed.
