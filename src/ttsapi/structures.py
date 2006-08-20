@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: structures.py,v 1.2 2006-08-09 12:05:23 hanke Exp $
+# $Id: structures.py,v 1.3 2006-08-20 21:11:49 hanke Exp $
 
 
 class Structure (object):
@@ -47,8 +47,9 @@ class Structure (object):
 
     def attributes_dictionary(self):
         """Returns a dictionary of attribute names and their values"""
+        dict = {}
         for a in self._attributes:
-            dict[a[0]] = self.getattr(a[0])
+            dict[a[0]] = getattr(self, a[0])
         return dict
 
 class DriverDescription(Structure):
@@ -66,23 +67,23 @@ class DriverCapabilities(Structure):
     """Descriptions of features supported by a driver"""    
 
     _attributes = (
-        ('can_list_voices', "", None),
+        ('can_list_voices', "", False),
         ('can_set_voice_by_properties', "", False),
-        ('self.can_get_current_voice', "", False),
-        ('self.rate_settings', "Rate settings: 'relative' and/or 'absolute'", []),
+        ('can_get_current_voice', "", False),
+        ('rate_settings', "Rate settings: 'relative' and/or 'absolute'", []),
         ('can_get_default_rate', "", False),
-        ('self.pitch_settings', "Pitch settings: 'relative' and/or 'absolute'", []),
+        ('pitch_settings', "Pitch settings: 'relative' and/or 'absolute'", []),
         ('can_get_default_pitch', "", False),
         ('pitch_range_settings', "Pitch range settings: 'relative' and/or 'absolute'", []),
         ('can_get_default_pitch_range', "", False),
         ('volume_settings', "Volume settings: 'relative' and/or 'absolute'", []),
         ('can_get_default_volume', "", False),
         # Style parameters
-        ('self.punctuation_modes',
+        ('punctuation_modes',
          """List of supported punctuation modes.
          Recognized values: all, none, some""",
          []),
-        ('self.can_set_punctuation_detail', "", False),
+        ('can_set_punctuation_detail', "", False),
         ('capital_letters_modes',         
          """List of supported modes for reading capital letters.
          Recognized values: 'spelling', 'icon', 'pitch'""",
@@ -120,15 +121,15 @@ class DriverCapabilities(Structure):
         ('supports_multilingual_utterances', "", False)
     )
 
-class VoiceDescription(object):
+class VoiceDescription(Structure):
 
     _attributes = (        
-        ('name', "Name of the voice"),
-        ('language', "ISO language code"),
+        ('name', "Name of the voice", None),
+        ('language', "ISO language code", None),
         ('dialect', "Dialect of the voice", None),
         ('gender',
          """Gender of the voice.
          Recognized values are 'male', 'female' and 'unknown'""",
-         'unknown'),
+         'unknown', None),
         ('age', "Age of the speaker in years or None", None)
     )
