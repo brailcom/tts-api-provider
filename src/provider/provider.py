@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.2 2006-08-09 12:06:12 hanke Exp $
+# $Id: provider.py,v 1.3 2006-08-20 21:04:58 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -34,7 +34,10 @@ class Provider(object):
     def __init__ (self):
         """Initialize the instance and connect to the server"""
         pass
-            
+
+    def init(self):
+        raise ErrorInvalidCommand
+    
     # Driver discovery
 
     def drivers (self):
@@ -43,21 +46,19 @@ class Provider(object):
         """
         raise ErrorNotSupportedByServer
         
-    def driver_capabilities (self, driver_id):
+    def driver_capabilities (self):
         """Return a DriverCapabilities object for the
         given driver.
 
         Arguments:
-        driver_id -- identification of the driver
         """
         pass
 
-    def voices (self, driver_id):
+    def voices (self):
         """Return a list of voices available to the given
         driver as a list of VoiceDescription objects.
 
         Arguments:
-        driver_id -- identification of the driver
         """
         return [["kal", 'en', 'nil', 'MALE', 30],
                 ["ked", 'en', 'nil', 'MALE', 30],
