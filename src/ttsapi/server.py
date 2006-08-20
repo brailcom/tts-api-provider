@@ -35,7 +35,7 @@ class TCPConnection(object):
             self.conn.close()
             raise ClientGone()
 
-    def __init__(self, provider, client_socket, logger):
+    def __init__(self, provider, logger, method='socket', client_socket=None):
         """Init the server side object for a new connection
         
         Arguments:
@@ -44,29 +44,71 @@ class TCPConnection(object):
         client_socket -- socket for communication with client"""
 
         self.provider = provider
-        self.conn = connection.SocketConnection(socket=client_socket, logger=logger)
         self.logger = logger
+        if method == 'socket':
+            self.conn = connection.SocketConnection(socket=client_socket,
+                                                    logger=logger)
+        elif method == 'pipe':
+            self.conn = connection.PipeConnection(logger=logger)
+        else:
+            raise "Unknown method of communication" + method
     
         self.commands_map = [
+            (('INIT',),
+             {
+            'function' : provider.init,
+            'reply' : (200, 'OK INITIALIZED SUCCESFULLY')
+            }),
             (('LIST', 'DRIVERS'),
              {
             'function'  :  provider.drivers,
+            'reply_hook':  self._list_drivers_reply,
             'reply' :  (201, 'OK LIST OF DRIVERS SENT')
             }),
 
-            (('DRIVER', 'CAPABILITIES', ('driver_id', str)),
+            (('DRIVER', 'CAPABILITIES'),
              {
             'function': provider.driver_capabilities,
             'reply_hook': self._driver_capabilities_reply,
             'reply': (201, 'OK LIST OF DRIVERS SENT')
             }),
 
-            (('LIST', 'VOICES', ('driver_id', str)),
+            (('LIST', 'VOICES'),
              {
             'function': provider.voices,
+            'reply_hook':  self._list_voices_reply,
             'reply': (203,'OK LIST OF VOICES SENT')
             }),
             
+            (('SAY', 'TEXT'),
+             {
+            'arg_data': True,
+            'function': provider.say_text,
+            'reply': (205, 'OK MESSAGE RECEIVED')
+            }),
+            
+            (('SAY', 'TEXT', 'FROM', 'POSITION',
+              ('position', int), ('position_type', str)),
+             {
+             'arg_data': True,
+            'function': provider.say_text,
+            'reply': (205, 'OK MESSAGE RECEIVED')
+            }),
+            
+            (('SAY', 'TEXT', 'FROM', 'CHARACTER',
+              ('character', int)),
+             {
+             'arg_data': True,
+            'function': provider.say_text,
+            'reply': (205, 'OK MESSAGE RECEIVED')
+            }),
+            
+            (('SAY', 'TEXT', 'FROM', 'INDEX MARK',
+              ('index_mark', str)),
+             {
+             'arg_data': True,
+            'function': provider.say_text
+            }),
             (('SAY', 'DEFERRED', ('message_id', int)),
              {
             'function': provider.say_deferred,
@@ -92,50 +134,58 @@ class TCPConnection(object):
              {
             'function': provider.say_deferred
             }),
-
             (('SAY', 'CHAR', ('character', str)),
-             {'function': provider.say_char
+             {'function': provider.say_char,
+                'reply': (205, 'OK MESSAGE RECEIVED')
               }),
             
             (('SAY', 'KEY', ('key', str)),
              {            
-            'function': provider.say_key
+            'function': provider.say_key,
+            'reply': (205, 'OK MESSAGE RECEIVED')
             }),
 
             (('SAY', 'ICON', ('icon', str)),
              {
-            'function': provider.say_icon
+            'function': provider.say_icon,
+            'reply': (205, 'OK MESSAGE RECEIVED')
             }),
             
             (('CANCEL'),
              {
-            'function': provider.cancel
+            'function': provider.cancel,
+            'reply': (209, 'OK CANCELED')
             }),
             
             (('DEFER'), 
              {
-            'function': provider.defer
+            'function': provider.defer,
+            'reply': (209, 'OK DEFERRED')
             }),      
             
             (('DISCARD', ('message_id', int)),
              {
-            'function': provider.discard
+            'function': provider.discard,
+            'reply': (210, 'OK DISCARDED')
             }),
 
             (('SET', 'DRIVER', ('driver_id', str)),
              {
-            'function': provider.set_driver
+            'function': provider.set_driver,
+            'reply': (211, 'OK PARAMETER SET')
             }),
             
             (('SET', 'VOICE', 'BY', 'NAME', ('voice_name', str)),
              {
-            'function': provider.set_voice_by_name
+            'function': provider.set_voice_by_name,
+            'reply': (211, 'OK PARAMETER SET')
             }),
 
             (('SET', 'VOICE', 'BY', 'PROPERTIES', ('language', str),
               ('dialect', str), ('gender', str), ('age', int), ('variant', int)),
              {
-            'function': provider.set_voice_by_properties
+            'function': provider.set_voice_by_properties,
+            'reply': (211, 'OK PARAMETER SET')
             }),
             
             (('GET', 'CURRENT', 'VOICE'),
@@ -145,7 +195,8 @@ class TCPConnection(object):
             
             (('SET', ('method', str), 'RATE', ('rate', int)),
              {
-            'function': provider.set_rate
+            'function': provider.set_rate,
+            'reply': (211, 'OK PARAMETER SET')
             }),
 
             (('GET', 'DEFAULT', 'ABSOLUTE', 'RATE'),
@@ -155,7 +206,8 @@ class TCPConnection(object):
             
             (('SET', ('method', str), 'PITCH', ('pitch', int)),
              {
-            'function': provider.set_pitch
+            'function': provider.set_pitch,
+            'reply': (211, 'OK PARAMETER SET')
             }),
             
             (('GET', 'DEFAULT', 'ABSOLUTE', 'PITCH'),
@@ -165,12 +217,14 @@ class TCPConnection(object):
             
             (('SET', ('method', str), 'PITCH_RANGE', ('range', int)),
              {
-            'function': provider.set_pitch_range
+            'function': provider.set_pitch_range,
+            'reply': (211, 'OK PARAMETER SET')
             }),
 
             (('SET', ('method', str), 'VOLUME', ('volume', int)),
              {
-            'function': provider.set_volume
+            'function': provider.set_volume,
+            'reply': (211, 'OK PARAMETER SET')
             }),
 
             (('GET', 'DEFAULT', 'ABSOLUTE', 'VOLUME'),
@@ -180,37 +234,44 @@ class TCPConnection(object):
 
             (('SET', 'PUNCTUATION', 'MODE', ('mode', str)),
              {
-            'function': provider.set_punctuation_mode
+            'function': provider.set_punctuation_mode,
+            'reply': (211, 'OK PARAMETER SET')
             }),
 
             (('SET', 'PUNCTUATION', 'DETAIL', ('detail', str)),
              {
-            'function': provider.set_punctuation_detail
+            'function': provider.set_punctuation_detail,
+            'reply': (211, 'OK PARAMETER SET')
             }),
 
             (('SET', 'CAPITAL', 'LETTERS', 'MODE', ('mode', str)),
              {
-            'function': provider.set_capital_letters_mode
+            'function': provider.set_capital_letters_mode,
+            'reply': (211, 'OK PARAMETER SET')
             }),
 
             (('SET', 'NUMBER', 'GROUPING', ('grouping', int)),
              {
-            'function': provider.set_number_grouping
+            'function': provider.set_number_grouping,
+            'reply': (211, 'OK PARAMETER SET')
             }),
             
             (('SET', 'AUDIO', 'OUTPUT', ('method',  str)),
              {
-            'function': provider.set_audio_output
+            'function': provider.set_audio_output,
+            'reply': (211, 'OK PARAMETER SET')
             }),
             
             (('SET', 'AUDIO', 'RETRIEVAL', ('host', str), ('port', int)),
              {
-            'function': provider.set_audio_retrieval_destination
+            'function': provider.set_audio_retrieval_destination,
+            'reply': (211, 'OK PARAMETER SET')
             }),
             
             (('HELP',),
              {
-            'function': None
+            'function': None,
+             'reply': (800, 'HELP SENT')
             }),
             (('QUIT',),
              {
@@ -232,19 +293,42 @@ class TCPConnection(object):
             (ErrorWrongEncoding, (404, 'ENCODING ERROR'))
             )
         
+    def _list_drivers_reply(self, result):
+        """Reply for list of drivers"""
+        reply = []
+        if result is not list:
+            result = [result]
+        
+        for driver in result:
+            reply += [[driver.driver_id, driver.synthesizer_name, driver.driver_version,
+            driver.synthesizer_version]]
+        return reply
+        
+    def _list_voices_reply(self, result):
+        """Reply for list of voices"""
+        reply = []
+        if not isinstance(result, list):
+            result = [result]
+        for voice in result:
+            reply += [[voice.name, voice.language, voice.dialect, voice.gender, voice.age]]
+        return reply
+        
     def _driver_capabilities_reply(self, result):
         """Driver capabilities reply hook"""
-
-        capabilities = result.attributes_dict()
+        capabilities = result.attributes_dictionary()
 
         reply = []
         for key, value in capabilities.iteritems():
             if isinstance(value, list):
-                reply += [key] + value
+                if value == []:
+                    reply += [[key] + ["nil"]]
+                else:
+                    reply += [[key] + value]
             elif isinstance(value, bool):
-                reply += [key, value.lower()]
+                reply += [[key, str(value).lower()]]
             else:
-                reply += [key, str(value)]
+                reply += [[key, str(value)]]
+        reply.sort() # just that it is more beautiful when inspected manually
         return reply
         
     def _cmd_matches(self, command, template):
@@ -289,19 +373,21 @@ class TCPConnection(object):
         if cmd == None:
             return None
         
-        cmdl = [a.lower for a in cmd]
+        #cmdl = [a.lower for a in cmd]
         
-        if cmdl[0] == 'say':
-            if cmdl[1] == 'text':
+        print cmd
+        if cmd[0] == 'SAY':
+            if cmd[1] == 'TEXT':
                 self.last_cmd = cmd
                 self.conn.data_transfer_on()
                 self.conn.send_reply(204, 'OK RECEIVING DATA')
                 return
-        elif cmdl[0] == '.':
+        elif cmd[0] == '.':
             self.conn.data_transfer_off()
-            data = self.get_data()
+            data = self.conn.get_data()
             # Say text with args from last_cmd and data
-            self.conn.send_reply('204 OK MESSAGE RECEIVED')
+            self.conn.send_reply(204, 'OK MESSAGE RECEIVED')
+            cmd = self.last_cmd
 
         for pos in range(0, len(self.commands_map)):
             # print self.commands_map[pos]
@@ -328,19 +414,23 @@ class TCPConnection(object):
             pass
         else:
             try:
-                result = function(**arg_dict)
+                if action.has_key('arg_data'):
+                    result = function(text=data, **arg_dict)
+                else:
+                    result = function(**arg_dict)
             except Error, err:
                 self._report_error(err);
-                return
+                return;
     
         if action.has_key('function_post_hook'):
             action['function_post_hook']()  
             
         if action.has_key('reply_hook'):
             result = action['reply_hook'](result)
-        else:
-            reply = action['reply']
-            if reply != None:
-                if (not isinstance(result, list)) and (not result == None):
-                    result = [result]
-                self.conn.send_reply(reply[0], reply[1], result)
+        
+        reply = action['reply']
+            
+        if reply != None:
+            if (not isinstance(result, list)) and (not result == None):
+                result = [result]
+            self.conn.send_reply(reply[0], reply[1], result)
