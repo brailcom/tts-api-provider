@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.2 2006-08-09 12:05:45 hanke Exp $
+# $Id: connection.py,v 1.3 2006-08-20 21:07:23 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -73,9 +73,12 @@ class Connection(object):
         if arg == None:
             return 'nil'
         else:
-            return str(arg)    
-        
-
+            str_arg = str(arg)
+            if str_arg.find(' ') != -1:
+                return '"'+str_arg+'"'
+            else:
+                return str_arg
+                
     def _write(self, data):
         """Write data to output.
 
@@ -290,7 +293,7 @@ class PipeConnection(Connection):
     
     NEWLINE = "\n"
 
-    def __init__(self, pipe_in=sys.stdin, pipe_out=sys.stdout):
+    def __init__(self, pipe_in=sys.stdin, pipe_out=sys.stdout, logger=None):
         """Setup pipes for communication
 
         pipe_in -- pipe for incomming communication (replies)
