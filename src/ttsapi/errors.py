@@ -16,7 +16,10 @@ class ClientError(Error):
     """Client error, invalid arguments or parameters received,
     invalid commands syntax, unparseable input."""
     pass
-
+    
+class DriverError(Error):
+    """Error in driver"""
+    
 class UnknownError(Error):
     """Unknown error (possibly with helpful method detail())"""
     pass
@@ -24,7 +27,7 @@ class UnknownError(Error):
 class ErrorNotSupportedByDriver(ServerError):
     """Not supported by the driver."""
     pass
-
+    
 class ErrorNotSupportedByServer(ServerError):
     """Not supported by the server (implementation incomplete)."""
     pass
@@ -32,7 +35,15 @@ class ErrorNotSupportedByServer(ServerError):
 class ErrorAccessToDriverDenied(ServerError):
     """Cannot access driver."""
     pass
-
+    
+class ErrorDriverNotLoaded(ServerError):
+    """Cannot access driver."""
+    pass
+    
+class ErrorRetrievalSocketNotInitialized(ServerError):
+    """Retrieval socket not yet initialized."""
+    pass
+    
 class ErrorInternal(ServerError):
     """Internal server error"""
     def __init():
@@ -62,3 +73,28 @@ class ErrorWrongEncoding(ClientError):
     """Invalid encoding from client."""
     pass
 
+class _CommunicationError(Exception):
+    def __init__ (self, code, msg, data):
+        Exception.__init__(self, "%s: %s" % (code, msg))
+        self.code = code
+        self.msg = msg
+        self.data = data
+
+    def code (self):
+        """Return the server response error code as integer number."""
+        return self.code
+        
+    def msg (self):
+        """Return server response error message as string."""
+        return self.msg
+    
+class TTSAPIError (_CommunicationError):
+    """Error in TTS API request"""
+    def __init__(self, error, code = None, msg = None, data = None):
+        self.error_description = error
+        self.code = code
+        self.msg = msg
+        self.data = data
+    
+    def __str__(self):
+        return "Error  with description: " + str(self.error_description)
