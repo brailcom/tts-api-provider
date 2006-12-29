@@ -1,16 +1,19 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 
 import sys
 import select
 import socket
+import time
 
 import driver
 
 from ttsapi.structures import *
 from ttsapi.errors import *
 
+retrieval_socket = None
+
 class Configuration(driver.Configuration):
-    """Configuration class"""
+    """Configuration class for Festival"""
     # public
     server_host = 'localhost'
     server_port = 1314
@@ -18,8 +21,8 @@ class Configuration(driver.Configuration):
     recode_fallback = '?'
     data_block = 4096
     # private
-    retrieval_host = None
-    retrieval_port = None
+    retrieval_host = '127.0.0.1'
+    retrieval_port = 6576
     
 conf = Configuration()
 
@@ -39,11 +42,13 @@ class FestivalConnection(object):
     """Connection to festival"""
     
     def open(self,host="localhost", port=1314):
-        """Open new festival to festival according to configuration"""
-        # Handle festival crashes
+        """Open new connection to festival according to configuration"""
+        # TODO: Handle festival crashes
         self._festival_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._festival_socket.connect((socket.gethostbyname(host), port))
         self._festival_socket.setblocking(0) # non-blocking
+        # disable Nagles algorithm
+        self._festival_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._com_buffer = ""
         try:
             self.command("require", ("speech-dispatcher", 's'))
@@ -99,36 +104,48 @@ class FestivalConnection(object):
         including reply identification, reply data and the trailing reply
         status information.
         
-        It returns a tuple (reply_data, reply_code). If reply_code is 'ER', it also
+        It returns a tuple (reply_code, reply_data, audio_data). If reply_code is 'ER', it also
         raises te FestivalReplyError exception.""" 
-    
+        id, audio_data, reply_data = None, None, None
+        
         self._read_to_buffer()
         id = self._read_identifier() # Read LP, OK, or ER
         if (id == 'OK') or (id == 'ER'):
             driver.log.debug("Received from Festival:" + id)
-            return (None, id)
-        elif (id == 'LP') or (id == 'WV'):
+            return (id, None, None)
+        
+        while (id == 'LP') or (id == 'WV'):
             driver.log.debug("Received from Festival:" + id)
             pointer = self._com_buffer.find('ft_StUfF_key')
             last_id = id
             while pointer == -1:
                 self._read_to_buffer()
                 pointer = self._com_buffer.find('ft_StUfF_key')
-            data = self._com_buffer[:pointer]
+            if id == 'LP':
+                reply_data = self._com_buffer[:pointer]
+            elif id == 'WV':
+                audio_data = self._com_buffer[:pointer]
+                
             self._com_buffer = self._com_buffer[pointer+len('ft_StUfF_key') : ]
             id = self._read_identifier()
-            if (id == 'OK') or (id == 'ER'):
-                if last_id != 'WV':
-                    driver.log.debug("Received data from Festival:" + data)
-                else: # we have audio data
-                    driver.log.debug("Received audio data")
-                driver.log.debug("Received from Festival:" + id)
-                return (data, id)
-            else:
-                driver.log.debug("Received from Festival:" + id)
-                raise FestivalCommunicationError("Expected ER or OK but got " + id)
+                
+        if (id == 'OK') or (id == 'ER'):
+            driver.log.debug("Received data from Festival:" + reply_data)
+            if audio_data != None:
+                driver.log.debug("Received audio data from Festival: (not listed)")
+            driver.log.debug("Received from Festival:" + id)
+            return (id, reply_data, audio_data)
+        else:
+            driver.log.debug("Received from Festival:" + id)
+            raise FestivalCommunicationError("Expected ER or OK but got " + id)
         
     def parse_lisp_list(self, lisp_list):
+        """Parse a lisp list returned from Festival as a string into a python
+        list of individual items.
+        
+        Arguments:
+        lisp_list -- a string containing the lisp list
+        """
         result = []
         temp = lisp_list.strip()
         if len(temp) == 0: return
@@ -205,24 +222,32 @@ class Core(driver.Core):
     
     def voices(self):
         """Return list of voices"""
-        voices_string, code = festival.command('voice-list')
+        code, voices_string, data = festival.command('voice-list')
         voice_list = voices_string.strip('()\n').split()
-        
+        driver.log.debug(str(voice_list))
         reply = []
         for voice_name in voice_list:
             voice = VoiceDescription()
-            voice_details, code = festival.command('voice.description', voice_name)
+            code, voice_details, data = festival.command('voice.description', (voice_name, 's'))
             voice.name = voice_name
-            for  entry, value in festival.parse_lisp_list(voice_details)[1]:
-                if entry == 'language':
-                    voice.language = value
-                elif entry == 'dialect':
-                    voice.dialect = value
-                elif entry == 'gender':
-                    voice.gender = value
-                elif entry == 'age':
-                    voice.age = int(age)
+            if voice_details.strip("\n\r ") != 'nil':
+                driver.log.debug("'"+str(voice_details)+"'")
+                driver.log.debug(str(festival.parse_lisp_list(voice_details)))
+                driver.log.debug(str(festival.parse_lisp_list(voice_details)[1]))
+                for  entry, value in festival.parse_lisp_list(voice_details)[1]:
+                    if entry == 'language':
+                        voice.language = value
+                    elif entry == 'dialect':
+                        voice.dialect = value
+                    elif entry == 'gender':
+                        voice.gender = value
+                    elif entry == 'age':
+                        voice.age = int(age)
+            else:
+                driver.log.warning("Voice description for voice " + voice_name +
+                    "missing in Festival reply!");
             reply += [voice]
+                
         return reply
     
     def driver_capabilities(self):
@@ -238,7 +263,7 @@ class Core(driver.Core):
             can_say_key = True,
             can_say_icon = True,
             audio_methods = ['retrieval'],
-            #events = 'index_marks',
+            events = 'message',
             performance_level = 'good',
             can_parse_ssml = True,
             supports_multilingual_utterances = False
@@ -303,6 +328,7 @@ class Core(driver.Core):
         method -- either 'relative' or 'absolute'          
         """
         assert isinstance(rate, int)
+        driver.log.debug("Got request to set rate " + method)
         if method == 'absolute':
             raise ErrorNotSupportedByDriver
         elif method == 'relative':
@@ -315,7 +341,9 @@ class Core(driver.Core):
                 festival.command("speechd-set-rate", frate/5)
             except FestivalReplyError:
                 driver.log.error("Festival can't set desired " + method + "TTS API rate " + str(rate))
-        
+        else:
+            raise ErrorInvalidArgument
+            
     def set_pitch(self, pitch, method='relative'):
         """Set relative or absolute pitch.
 
@@ -338,6 +366,8 @@ class Core(driver.Core):
                 festival.command("speechd-set-pitch", fpitch/5)
             except FestivalReplyError:
                 driver.log.error("Festival can't set desired " + method + "TTS API pitch " + str(pitch))
+        else:
+            raise ErrorInvalidArgument
                 
     ## Style parameters
 
@@ -381,7 +411,8 @@ class Core(driver.Core):
         if method == 'playback':
             raise ErrorNotSupportedByDriver
         else: # method == retrieval
-            return; # Retrieval is the default and only option for this driver
+            return
+            
 
     def set_audio_retrieval_destination(self, host, port):
         """Set destination for audio retrieval socket.
@@ -391,86 +422,194 @@ class Core(driver.Core):
         containing groups of three digits separated by a dot
         port -- a positive number specifying the host port          
         """
+        global retrieval_socket
         assert isinstance(host, str)
         assert isinstance(port, int) and port > 0
+
+#        if (retrieval_socket == None
+ #           or retrieval_socket.host != host or retrieval_socket.port != port):
         conf.retrieval_host = host
         conf.retrival_port = port
-
+        if retrieval_socket != None:
+            retrieval_socket.close()
+        retrieval_socket = driver.RetrievalSocket(host=conf.retrieval_host, \
+                                                      port=conf.retrieval_port)
+        
 class Controller(driver.Controller):
     
-    def retrieve_data(self):
-    # TODO: retrieve data, send them to the desired output, etc.
-#        while True:
- #           data, code = festival.command('speechd-next')
+    def retrieve_data(self, message_id):
     
+        def read_item(header, data, type):
+            pos = header.find(data)
+            nist_type = header[pos+len(data)+2];
+            pos_data_begin = header.find(" ", pos+len(data)+2)
+            pos_data_end = header.find("\n", pos+len(data)+2)                    
+            pos_data = header[pos_data_begin:pos_data_end]
+            if nist_type == 'i':
+                return int(pos_data)
+            elif nist_type == 's':
+                return pos_data
+    
+        block_number = 0
+        total_samples = 0
+        code, reply_data, audio_data = festival.command('speechd-next')
+        driver.log.info("speechd-next returned code: " + code)
+        driver.log.info("speechd-next returned data: " + reply_data)
+        while True:
+            #driver.log.info("speechd-next returned audio data: " + audio_data)
+    
+            if audio_data == None:
+                driver.log.info("No audio data, skipping")
+                return
+    
+            if audio_data[:4] != "NIST":
+                driver.log.error("NIST header missing in audio block from festival, skipping")
+                continue
+        
+            audio_NIST_header = audio_data[:1024]
+            audio_data_raw = audio_data[1024:]
+            #driver.log.info("Audio NIST header follows:\n"+audio_NIST_header)
+            sample_rate = read_item(audio_NIST_header, "sample_rate", int)
+            sample_count = read_item(audio_NIST_header, "sample_count", int)
+            total_samples += sample_count
+            sample_byte_format = read_item(audio_NIST_header, "sample_byte_format", str)
+            sample_n_bytes = read_item(audio_NIST_header, "sample_n_bytes", int)
+            channel_count = read_item(audio_NIST_header, "channel_count", int)
+            
+            if sample_byte_format == '01':
+                endian = 'LE'
+            elif sample_byte_format == '10':
+                endian = 'BE'
+            else:
+                driver.log.error("Unknown byte format from Festival, supposing little endian")
+                endian = 'LE'
+            
+            encoding = 'S'+str(8*sample_n_bytes) + '_' + endian
+
+            global retrieval_socket
+            driver.log.info("Sending audio data for playback")
+
+            event_list = []
+            if block_number == 0:
+                event_list.append(AudioEvent(type='message_start', pos_text=0,
+                                             pos_audio=0))
+
+            code, reply_data, audio_data = festival.command('speechd-next')
+            
+            if audio_data == None:
+                # End of data
+                event_list.append(AudioEvent(type='message_end', pos_text = 0,
+                                             pos_audio = float(total_samples)/sample_rate*1000))
+                                 
+            retrieval_socket.send_data_block(
+                msg_id = message_id, block_number = block_number,
+                data_format = "raw",
+                audio_length = sample_count/sample_rate*1000,
+                audio_data=audio_data_raw,
+                sample_rate = sample_rate,
+                channels = channel_count,
+                encoding = encoding,
+                event_list = event_list)
+            block_number += 1
+            
     def say_text (self, text, format='ssml',
                  position = None, position_type = None,
-                 index_mark = None, character = None):
+                 index_mark = None, character = None, message_id = None):
         """Say text using Festivals (SayText ...) method"""
-        
+
+        if message_id == None:
+            raise """Invalid message_id None"""        
         if len(text) == 0: return
-        if format == 'plain': raise ErrorNotSupportedByDriver
-        
-        # TODO: This is only method PLAYBACK, RETRIEVAL is desired
-        # see festival.c in Speech Dispatcher
+        if format != 'ssml': raise ErrorNotSupportedByDriver
+    
         escaped_text = text.replace('\\','\\\\').replace('"', '\\\"')
         
         # Ask for synthesis
         try:
-            festival.command("speechd-say-ssml", escaped_text)
+            festival.command("speechd-speak-ssml", escaped_text)
         except:
             driver.log.error("SayText unsuccessful with text: |" + text + "|")
+            return
 
         # Retrieve data and listen for stop events
-        self.retrieve_data()
+        try:
+            self.retrieve_data(message_id = message_id)
+        except FestivalError:
+            driver.log.error("Couldn't retrieve audio data.");
         
-    def say_key (self, key):
+        return message_id
+        
+    def say_key (self, key, message_id=None):
         """Synthesize a key event.
 
         Arguments:
         key -- a string containing a key identification as defined
         in TTS API          
         """
+        if message_id == None:
+            raise """Invalid message_id None"""        
         try:
             festival.command("speechd-key", key)
         except:
             driver.log.error("speechd-key unsuccessful with key: |" + key + "|")
 
         # Retrieve data and listen for stop events
-        self.retrieve_data()
+        try:
+            self.retrieve_data(message_id = message_id)
+        except:
+            driver.log.error("Couldn't retrieve audio data.");
         
-    def say_char (self, character):
+        return message_id
+        
+    def say_char (self, character, message_id=None):
         """Synthesize a character event.
 
         Arguments:
         character -- a single UTF-32 character.          
         """
+        if message_id == None:
+            raise """Invalid message_id None"""        
         try:
             festival.command("speechd-character", character)
         except:
             driver.log.error("speechd-character unsuccessful with: |" + character + "|")
 
         # Retrieve data and listen for stop events
-        self.retrieve_data()
+        try:
+            self.retrieve_data(message_id = message_id)
+        except:
+            driver.log.error("Couldn't retrieve audio data.");
         
-    def say_icon (self, icon):
+        return message_id
+        
+    def say_icon (self, icon, message_id=None):
         """Synthesize a sound icon.
 
         Arguments:
         icon -- name of the icon as defined in TTS API.          
         """
         assert isinstance(icon, str)
+        if message_id == None:
+            raise """Invalid message_id None"""        
         try:
             festival.command("speechd-icon", (icon, 's'))
         except:
             driver.log.error("speechd-icon unsuccessful with: |" + icon + "|")
 
         # Retrieve data and listen for stop events
-        self.retrieve_data()
+        try:
+            self.retrieve_data(message_id = message_id)
+        except:
+            driver.log.error("Couldn't retrieve audio data.");
+        
+        return message_id
         
     def cancel (self):
         """Cancel current synthesis process and audio output."""
-        raise ErrorNotSupportedByDriver
+
+        #Here we should somehow terminate synthesis when it will be possible
+        #in Festival
+        pass
         
     def defer (self):
         """Defer current message."""
@@ -487,6 +626,7 @@ class Controller(driver.Controller):
         
 def main():
     """Main loop for driver code"""
+
     driver.main_loop(Core, Controller)
     
 if __name__ == "__main__":
