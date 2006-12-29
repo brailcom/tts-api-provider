@@ -42,9 +42,11 @@ class TCPConnection(object):
         provider -- the TTS API Provider containing all
         functions defined bellow in commands_map
         client_socket -- socket for communication with client"""
-
+        global log
+        logger.debug("Going to create connection")
         self.provider = provider
         self.logger = logger
+        log = logger
         if method == 'socket':
             self.conn = connection.SocketConnection(socket=client_socket,
                                                     logger=logger)
@@ -52,6 +54,8 @@ class TCPConnection(object):
             self.conn = connection.PipeConnection(logger=logger)
         else:
             raise "Unknown method of communication" + method
+    
+        self.logger.debug("Connection created")
     
         self.commands_map = [
             (('INIT',),
@@ -80,35 +84,41 @@ class TCPConnection(object):
             'reply': (203,'OK LIST OF VOICES SENT')
             }),
             
-            (('SAY', 'TEXT'),
+            (('SAY', 'TEXT', ('format', str)),
              {
             'arg_data': True,
             'function': provider.say_text,
+            'reply_hook':  self._say_text_reply,
             'reply': (205, 'OK MESSAGE RECEIVED')
             }),
             
-            (('SAY', 'TEXT', 'FROM', 'POSITION',
+            (('SAY', 'TEXT', ('format', str), 'FROM', 'POSITION',
               ('position', int), ('position_type', str)),
              {
              'arg_data': True,
             'function': provider.say_text,
+            'reply_hook':  self._say_text_reply,
             'reply': (205, 'OK MESSAGE RECEIVED')
             }),
             
-            (('SAY', 'TEXT', 'FROM', 'CHARACTER',
+            (('SAY', 'TEXT', ('format', str), 'FROM', 'CHARACTER',
               ('character', int)),
              {
              'arg_data': True,
             'function': provider.say_text,
+            'reply_hook':  self._say_text_reply,
             'reply': (205, 'OK MESSAGE RECEIVED')
             }),
             
-            (('SAY', 'TEXT', 'FROM', 'INDEX MARK',
+            (('SAY', 'TEXT', ('format', str), 'FROM', 'INDEX MARK',
               ('index_mark', str)),
              {
              'arg_data': True,
-            'function': provider.say_text
+            'function': provider.say_text,
+            'reply_hook':  self._say_text_reply,
+            'reply': (205, 'OK MESSAGE RECEIVED')
             }),
+            
             (('SAY', 'DEFERRED', ('message_id', int)),
              {
             'function': provider.say_deferred,
@@ -136,28 +146,31 @@ class TCPConnection(object):
             }),
             (('SAY', 'CHAR', ('character', str)),
              {'function': provider.say_char,
+                'reply_hook':  self._say_text_reply,
                 'reply': (205, 'OK MESSAGE RECEIVED')
               }),
             
             (('SAY', 'KEY', ('key', str)),
              {            
             'function': provider.say_key,
+            'reply_hook':  self._say_text_reply,
             'reply': (205, 'OK MESSAGE RECEIVED')
             }),
 
             (('SAY', 'ICON', ('icon', str)),
              {
             'function': provider.say_icon,
+            'reply_hook':  self._say_text_reply,
             'reply': (205, 'OK MESSAGE RECEIVED')
             }),
             
-            (('CANCEL'),
+            (('CANCEL',),
              {
             'function': provider.cancel,
             'reply': (209, 'OK CANCELED')
             }),
             
-            (('DEFER'), 
+            (('DEFER',), 
              {
             'function': provider.defer,
             'reply': (209, 'OK DEFERRED')
@@ -169,6 +182,12 @@ class TCPConnection(object):
             'reply': (210, 'OK DISCARDED')
             }),
 
+            (('SET', 'MESSAGE', 'ID', ('message_id', int)),
+             {
+            'function': provider.set_message_id,
+            'reply': (211, 'OK PARAMETER SET')
+            }),
+            
             (('SET', 'DRIVER', ('driver_id', str)),
              {
             'function': provider.set_driver,
@@ -285,20 +304,22 @@ class TCPConnection(object):
             (ErrorNotSupportedByDriver, (301, 'NOT SUPPORTED BY DRIVER')),
             (ErrorNotSupportedByServer, (302, 'NOT SUPPORTED BY SERVER')),
             (ErrorAccessToDriverDenied, (303, 'DRIVER ACCESS DENIED')),
-            (ErrorInternal, (304, 'INTERNAL ERROR')),
+            (ErrorDriverNotLoaded, (303, 'DRIVER NOT LOADED')),
+            (ErrorRetrievalSocketNotInitialized, (304, 'RETRIEVAL SOCKET NOT INITIALIZED')),
+            (ErrorInternal, (399, 'INTERNAL ERROR')),
             (ErrorInvalidCommand, (400, 'INVALID COMMAND')),
             (ErrorInvalidArgument, (401, 'INVALID ARGUMENT')),
             (ErrorMissingArgument, (402, 'MISSING ARGUMENT')),
             (ErrorInvalidParameter, (403, 'INVALID PARAMETER')),
-            (ErrorWrongEncoding, (404, 'ENCODING ERROR'))
+            (ErrorWrongEncoding, (404, 'ENCODING ERROR')),
+            (DriverError, (500, 'UNKNOWN ERROR IN DRIVER'))
             )
         
     def _list_drivers_reply(self, result):
         """Reply for list of drivers"""
         reply = []
-        if result is not list:
+        if not isinstance(result, list):
             result = [result]
-        
         for driver in result:
             reply += [[driver.driver_id, driver.synthesizer_name, driver.driver_version,
             driver.synthesizer_version]]
@@ -312,7 +333,12 @@ class TCPConnection(object):
         for voice in result:
             reply += [[voice.name, voice.language, voice.dialect, voice.gender, voice.age]]
         return reply
-        
+    
+    def _say_text_reply(self, result):
+        """Reply with message id"""
+        self.logger.debug("RESULT: "+str(result))
+        return str(result)
+    
     def _driver_capabilities_reply(self, result):
         """Driver capabilities reply hook"""
         capabilities = result.attributes_dictionary()
@@ -374,8 +400,9 @@ class TCPConnection(object):
             return None
         
         #cmdl = [a.lower for a in cmd]
+
+        log.debug("|"+cmd[0]+"|")
         
-        print cmd
         if cmd[0] == 'SAY':
             if cmd[1] == 'TEXT':
                 self.last_cmd = cmd
@@ -383,11 +410,20 @@ class TCPConnection(object):
                 self.conn.send_reply(204, 'OK RECEIVING DATA')
                 return
         elif cmd[0] == '.':
-            self.conn.data_transfer_off()
-            data = self.conn.get_data()
-            # Say text with args from last_cmd and data
-            self.conn.send_reply(204, 'OK MESSAGE RECEIVED')
-            cmd = self.last_cmd
+            # Try to switch of data mode and get the data. If we are
+            # not in data mode, just continue with the invalid dot-starting
+            # command, proper exception will be raised later as for other
+            # invalid commands
+            try:
+                self.conn.data_transfer_off()
+            except:
+                cmd = '.'
+                pass
+            else:
+                data = self.conn.get_data()
+                # Say text with args from last_cmd and data
+                #self.conn.send_reply(204, 'OK MESSAGE RECEIVED')
+                cmd = self.last_cmd
 
         for pos in range(0, len(self.commands_map)):
             # print self.commands_map[pos]
@@ -403,20 +439,24 @@ class TCPConnection(object):
             atom = template[i]
             if isinstance(atom, tuple):
                 arg_type = atom[1]
-                arg_dict[atom[0]] = arg_type(cmd[i])
-
+                arg_dict[atom[0]] = arg_type(cmd[i].rstrip('"').lstrip('"'))
+                
         if not action.has_key('function'):
             self._report_error(ErrorInternal());
+            return
         else:
             function = action['function']
-
+    
+        self.logger.debug(str(function) + str(arg_dict))
+    
         if function == None:
-            pass
+            self.logger.warning("No associated function for this command, ignoring.");
         else:
             try:
                 if action.has_key('arg_data'):
                     result = function(text=data, **arg_dict)
                 else:
+                    self.logger.debug("Starting function")
                     result = function(**arg_dict)
             except Error, err:
                 self._report_error(err);
