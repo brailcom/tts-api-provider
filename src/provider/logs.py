@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: logs.py,v 1.1 2006-08-09 12:06:18 hanke Exp $
+# $Id: logs.py,v 1.2 2006-12-29 22:23:37 hanke Exp $
 
 import logging
 import sys
@@ -47,6 +47,8 @@ class Logging(logging.Logger):
         """
         
         # TODO: First write to log file all the information gathered at stage 1
+
+        # Save reference to the configuration object for later use
         if not conf.log_on_stdout:
             self.removeHandler(self.stdout_handler)
         self.file_handler = logging.FileHandler(conf.log_path)
@@ -54,7 +56,3 @@ class Logging(logging.Logger):
         self.file_handler.setFormatter(formatter)
         self.addHandler(self.file_handler)
         self.setLevel(conf.log_level)
-
-# Create the log object
-log = Logging()
-
