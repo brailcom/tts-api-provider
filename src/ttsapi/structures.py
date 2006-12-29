@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: structures.py,v 1.3 2006-08-20 21:11:49 hanke Exp $
+# $Id: structures.py,v 1.4 2006-12-29 22:40:28 hanke Exp $
 
 
 class Structure (object):
@@ -39,12 +39,15 @@ class Structure (object):
                 value = args.get
                 if args.has_key (name):
                     value = args[name]
+                    del args[name]
                 else:
                     value = a[2]
             else:
                 value = args[name]
             setattr (self, name, value)
-
+        if len(args) != 0:
+            raise "Unknown argument(s): "+str(args)
+            
     def attributes_dictionary(self):
         """Returns a dictionary of attribute names and their values"""
         dict = {}
@@ -105,7 +108,7 @@ class DriverCapabilities(Structure):
         # Events and index marking
         ('events',
         """List of supported audio events.
-        Recognized values are: 'by_sentences', 'by_words', 'index_marks'""",
+        Recognized values are: 'message', 'by_sentences', 'by_words', 'index_marks'""",
          []),
         # Performance guidelines
         ('performance_level',         
@@ -131,5 +134,16 @@ class VoiceDescription(Structure):
          """Gender of the voice.
          Recognized values are 'male', 'female' and 'unknown'""",
          'unknown', None),
-        ('age', "Age of the speaker in years or None", None)
+        ('age', "Age of the speaker in years or None", 0)
     )
+
+class AudioEvent(Structure):
+    _attributes = (
+        ("type", "Type of the event", None),
+        ("n", "Number of the event inside the message", None),
+        ("name", "Name of index mark", None),
+        ("pos_text", "Position in text (number of characters)", None),
+        ("pos_audio", "Position in audio (number of miliseconds)", None),
+        ("message_id", "ID of the corresponding message", None),
+        ("dispatched", "Was the event dispatched already?", False)
+        )
