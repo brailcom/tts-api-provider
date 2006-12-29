@@ -17,10 +17,9 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: configuration.py,v 1.1 2006-08-09 12:06:24 hanke Exp $
+# $Id: configuration.py,v 1.2 2006-12-29 22:17:14 hanke Exp $
 
 import logging
-from logs import log
 from optparse import OptionParser
 
 MyDebug = True
@@ -35,7 +34,7 @@ class Configuration(object):
                 'descr' : "Port for the server",
                 'doc' : None,
                 'type' : int,
-                'default' : 6562, 
+                'default' : 6567, 
                 'check' : lambda x: x>0,
                 'command_line' : ('-p', '--port')
             },
@@ -78,14 +77,14 @@ class Configuration(object):
                 'descr' : "Format of log entries",
                 'doc' : """See the Python logging package for more details""",
                 'type' : str,
-                'default' : "%(asctime)s %(levelname)s %(message)s"
+                'default' : "%(asctime)s %(threadName)s %(levelname)s %(message)s"
             },
         'log_level':
             {
                 'descr' : "Logging level",
                 'type' : int,
                 'command_line': ('-l', '--log-level'),
-                'default' : logging.INFO,
+                'default' : logging.DEBUG,
                 'arg_map' : (str, {
                     'critical' : logging.CRITICAL,
                     'error':logging.ERROR,
@@ -93,11 +92,37 @@ class Configuration(object):
                     'info':logging.INFO,
                     'debug':logging.DEBUG
                 })
+            },
+
+            'audio_port' :  
+            {
+                'descr' : "Audio port (sink) for the server",
+                'doc' : None,
+                'type' : int,
+                'default' : 6576, 
+                'check' : lambda x: x>0,
+                'command_line' : ('-a', '--audio-port')
+            },
+            'available_drivers':
+            {
+                'descr': "List of module names and their executables",
+                'doc':None,
+                'type': object,
+                'default': [('festival',
+                    '/home/hanke/cvs/tts-api-provider/src/provider/festival.py')]
+            },
+            'default_driver':
+            {
+                'descr': "Default driver",
+                'doc':None,
+                'type':str,
+                'default': "festival"
             }
         }
     
-    def __init__(self):
-    
+    def __init__(self, logger):
+        global log
+        log = logger
         self.cmdline_parser = OptionParser()
     
         for option, definition in self._conf_options.iteritems():
@@ -147,10 +172,7 @@ class Configuration(object):
                     setattr(self, option, val)
                     log.debug("Option %s overriden from command line to value %s", option, val)
         
-        if len(args) != 0:
-            raise "This command takes no positional arguments (without - or -- prefix)"
+        #if len(args) != 0:
+           # raise "This command takes no positional arguments (without - or -- prefix)"
 
         self.log_path = self.log_dir + self.log_name
-
-# Create the conf object
-conf = Configuration()
