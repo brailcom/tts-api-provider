@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.3 2006-08-20 21:07:23 hanke Exp $
+# $Id: connection.py,v 1.4 2006-12-29 22:36:44 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -26,8 +26,45 @@ import socket;
 import string;
 import sys;
 
-class Connection(object):
+from errors import *
 
+def parse_list (data):
+    """Sends a command which expects reply in the form of a list and
+    returns the parsed reply.
+     Returns a nested list. Each atom in the main list corresponds with one
+    line of the reply and contains a list of constants on that line.
+    """
+    result = []
+    for line in data:
+        j = 0
+        constr, quotes = False, False
+        result_line = []
+        for i in range(0, len(line)):
+            if constr == True:
+                if (line[i] == ' ' and quotes == False):
+                    result_line.append(_nil_to_None(line[j:i]))
+                    constr = False
+                elif (line[i] == '"' and quotes == True):
+                    result_line.append(line[j:i])
+                    constr, quotes = False, False
+            elif constr == False:
+                if line[i] == '"':
+                    j = i+1
+                    constr, quotes = True, True
+                elif line[i] != ' ':
+                    j = i
+                    constr, quotes = True, False
+        result_line.append(line[j:].rstrip('"'))
+        result.append(result_line)
+    return result   
+
+def _nil_to_None(str):
+    if str == 'nil':
+        return None
+    else:
+        return str
+
+class Connection(object):
     NEWLINE = "\r\n"
     """New line delimiter """
 
@@ -62,12 +99,6 @@ class Connection(object):
         
         """
         raise NotImplementedError
-
-    def _nil_to_None(self, str):
-        if str == 'nil':
-            return None
-        else:
-            return str
 
     def _arg_to_str(self, arg):
         if arg == None:
@@ -117,14 +148,14 @@ class Connection(object):
         Raise an exception in case of error response (non 2xx code).
         
         """        
-
+        
         cmd = str.join(' ', [command,] + map(self._arg_to_str, args)) \
               + self.NEWLINE
         self._write(cmd)
         code, msg, data = self._recv_response()
         if code/100 != 2:
             raise TTSAPIError(code, msg, cmd)
-        return code, msg, data
+        return code, msg, parse_list(data)
 
     def send_reply(self, code, text, args = None):
         """Send reply to the client
@@ -156,7 +187,12 @@ class Connection(object):
         data -- the data including the trailing newline"""
 
         data = self._read_line()
+
+        self.logger.debug("receive_line: received" + str(data))
+        
         if not self._data_transfer:
+            # TODO: Doublequotes
+            
             return data.split(' ')
         else:
             if data == '.':
@@ -179,38 +215,7 @@ class Connection(object):
 
     def get_data(self):
         return self._server_side_buf
-
-    def parse_list (self, data):
-        """Sends a command which expects reply in the form of a list and
-        returns the parsed reply.
-
-        Returns a nested list. Each atom in the main list corresponds with one
-        line of the reply and contains a list of constants on that line.
-        """        
-        result = []
-        for line in data:
-            j = 0
-            constr, quotes = False, False
-            result_line = []
-            for i in range(0, len(line)):
-                if constr == True:
-                    if (line[i] == ' ' and quotes == False):
-                        result_line.append(self._nil_to_None(line[j:i]))
-                        constr = False
-                    elif (line[i] == '"' and quotes == True):
-                        result_line.append(line[j:i])
-                        constr, quotes = False, False
-                elif constr == False:
-                    if line[i] == '"':
-                        j = i+1
-                        constr, quotes = True, True
-                    elif line[i] != ' ':
-                        j = i
-                        constr, quotes = True, False
-            result_line.append(line[j:].rstrip('"'))
-            result.append(result_line)
-        return result
-
+        
 
     def send_data (self, data):
         """Send multiline data and read server responsse.
@@ -245,14 +250,18 @@ class SocketConnection(Connection):
     def __init__(self, host="127.0.0.1", port=6570, socket=None, logger=None):
         """Init a connection to the server"""
         
-        #Connection.__init__(self, logger=logger)
-        self.logger = logger
+        Connection.__init__(self, logger=logger)
+        #self.logger = logger
         
         if socket==None:
-            log.debug()
+            if self.logger:
+                self.logger.debug("Opening new socket")
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._socket.connect((socket.gethostbyname(host), port))
         else:
+            if self.logger:
+                self.logger.debug("Using existing socket")
             self._socket = socket
 
     def _read_line(self):
@@ -264,7 +273,12 @@ class SocketConnection(Connection):
         """
         pointer = self._buffer.find(self.NEWLINE)
         while pointer == -1:
-            self._buffer += self._socket.recv(1024)
+            res = self._socket.recv(1024)
+            # WARNING: I don't know if this is correct, python library
+            # documentation is unclear here, but it seems to work
+            if res == "":
+                raise IOError
+            self._buffer += res
             pointer = self._buffer.find(self.NEWLINE)
         line = self._buffer[:pointer]
         self._buffer = self._buffer[pointer+len(self.NEWLINE):]
@@ -272,6 +286,23 @@ class SocketConnection(Connection):
             self.logger.debug("Received over socket: %s",  line)
         return line
 
+    def read_data(self, bytes):
+        """Read the specified amount of data"""
+        result, bytes_to_read = self._buffer, bytes-len(self._buffer)
+        self._buffer = ""
+        
+        while bytes_to_read > 4096:
+            data = self._socket.recv(4096)
+            result += data
+            bytes_to_read -= len(data) 
+        
+        while bytes_to_read > 0:
+            data = self._socket.recv(bytes_to_read)
+            result += data
+            bytes_to_read -= len(data) 
+        
+        return result
+        
     def _write(self, data):
         """Write data to output.
 
@@ -279,9 +310,13 @@ class SocketConnection(Connection):
         necessary newlines and carriage return characters."""
         
         self._socket.send(data)
+        #self._socket.flush()
         if self.logger: 
             self.logger.debug("Sent over socket: %s",  data)
         
+    def fileno(self):
+        return self._socket.fileno()
+    
     def close (self):
         """Close the connection."""
         socket.socket.close(self._socket)
@@ -291,7 +326,7 @@ class SocketConnection(Connection):
 class PipeConnection(Connection):
     """Connection through pipes"""
     
-    NEWLINE = "\n"
+    NEWLINE = "\r\n"
 
     def __init__(self, pipe_in=sys.stdin, pipe_out=sys.stdout, logger=None):
         """Setup pipes for communication
@@ -299,8 +334,7 @@ class PipeConnection(Connection):
         pipe_in -- pipe for incomming communication (replies)
         pipe_out -- pipe for outcomming communication (commands, data)
         """
-
-        Connection.__init__(self)
+        Connection.__init__(self, logger=logger)
         self.pipe_in=pipe_in
         self.pipe_out=pipe_out
 
@@ -311,15 +345,21 @@ class PipeConnection(Connection):
         `NEWLINE' constant).  Blocks until the delimiter is read.
         
         """
-        return self.pipe_in.readline().rstrip(self.NEWLINE)
-
+        
+        line = self.pipe_in.readline().rstrip(self.NEWLINE)
+        if self.logger:
+            self.logger.debug("Received over pipe: %s",  line)
+        return line
+        
     def _write(self, data):
         """Write data to output.
 
         data -- contains the data to be written including the
         necessary newlines and carriage return characters."""
-        
         self.pipe_out.write(data)
+        self.pipe_out.flush()
+        if self.logger: 
+            self.logger.debug("Sent over pipe: %s",  data)
 
     def close (self):
         """Close the connection."""
