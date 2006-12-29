@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.2 2006-08-09 12:05:51 hanke Exp $
+# $Id: client.py,v 1.3 2006-12-29 22:34:17 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -26,33 +26,7 @@ import sys
 
 import connection
 from structures import *
-
-
-
-# --------------- Exceptions --------------------------
-
-class _CommunicationError(Exception):
-    def __init__ (self, code, msg, data):
-        Exception.__init__(self, "%s: %s" % (code, msg))
-        self.code = code
-        self.msg = msg
-        self.data = data
-
-    def code (self):
-        """Return the server response error code as integer number."""
-        return self.code
-        
-    def msg (self):
-        """Return server response error message as string."""
-        return self.msg
-
-class TTSAPIError (_CommunicationError):
-    """Error in TTS API request"""
-    def __init__(self, error, code = None, msg = None, data = None):
-        self.error_description = error
-        self.code = code
-        self.msg = msg
-        self.data = data
+from errors import TTSAPIError
 
 # --------------- TTS API --------------------------
 
@@ -68,7 +42,7 @@ class TCPConnection(object):
     """
 
     def __init__ (self, method, host='127.0.0.1', port='6570',
-                  pipe_in = sys.stdin, pipe_out = sys.stdout):
+                  pipe_in = sys.stdin, pipe_out = sys.stdout, logger=None):
         """Initialize the instance and connect to the server
 
         Arguments:
@@ -79,30 +53,34 @@ class TCPConnection(object):
           
         """
         assert method in ['socket', 'pipe']
-        
+        self.logger = logger
         if method == 'socket':
-            self._conn = connection.SocketConnection(host, port)
+            self._conn = connection.SocketConnection(host, port, logger=logger)
         elif method == 'pipe':
-            self._conn = connection.PipeConnection(pipe_in, pipe_out)
+            self._conn = connection.PipeConnection(pipe_in, pipe_out, logger=logger)
             
     # Driver discovery
 
+    def init(self):
+        """Initialize"""
+        self._conn.send_command("INIT")
+    
     def drivers (self):
         """Return a list of DriverDescription objects containing
         information about the available drivers
         """
-        code, msg, data = self._conn.send_command("LIST DRIVERS")
-        raw = self._conn.parse_list(data)
+        code, msg, raw = self._conn.send_command("LIST DRIVERS")
         driver_descr = []
+        
         for driver in raw:
             driver_descr.append(
-                DriverDescription(id = driver[0], synth_name = driver[1],
+                DriverDescription(driver_id = driver[0], synthesizer_name = driver[1],
                                   driver_version = driver[2],
-                                  synth_version = driver[3]))
+                                  synthesizer_version = driver[3]))
 
         return driver_descr
         
-    def driver_capabilities (self, driver_id):
+    def driver_capabilities (self):
         """Return a DriverCapabilities object for the
         given driver.
 
@@ -115,14 +93,12 @@ class TCPConnection(object):
             if arg == "true":
                 return True
             elif arg == "false":
-                return false
+                return False
             else:
                 TTSAPIError("Truth value expected"
                             "in driver capabilities response")
 
-        code, msg, data = self._conn.send_command("DRIVER CAPABILITIES",
-                                                  driver_id)
-        raw = self._conn.parse_list(data)
+        code, msg, raw = self._conn.send_command("DRIVER CAPABILITIES")
 
         result = DriverCapabilities()
 
@@ -148,21 +124,19 @@ class TCPConnection(object):
 
         return result
 
-    def voices (self, driver_id):
-        """Return a list of voices available to the given
+    def voices (self):
+        """Return a list of voices available to the currently set
         driver as a list of VoiceDescription objects.
 
         Arguments:
         driver_id -- identification of the driver
         """
-        code, msg, data = self._conn.send_command("LIST VOICES")
-        raw = self._conn.parse_list(data)
+        code, msg, raw = self._conn.send_command("LIST VOICES")
 
         res = []
         for voice in raw:
             if len(voice) < 4:
                 raise TTSAPIError("Malformed list of voices: too few parameters") 
-            print voice            
             res.append(
                 VoiceDescription(name=voice[0], language=voice[1],
                                  dialect=voice[2], gender=voice[3].lower(),
@@ -216,14 +190,12 @@ class TCPConnection(object):
             self._conn.send_command("SAY TEXT", format, "FROM CHARACTER",
                                     str(character))
             
-        
         code, msg, data = self._conn.send_data(text);
 
         if len(data) < 1 or not data[0].isdigit():
-            raise TTSAPIError("Incorrect reply on 'SAY TEXT' command, data section.")
+            raise TTSAPIError("Incorrect reply on 'SAY TEXT' command, message id missing.")
 
         return int(data[0])
-        
         
     def say_deferred (self, message_id,
                       format='plain',
@@ -326,6 +298,11 @@ class TCPConnection(object):
         assert isinstance(driver_id, str)
         self._conn.send_command("SET DRIVER", driver_id)
 
+    def set_message_id(self, message_id):
+        """Set message identification number"""
+        assert isinstance(message_id, int)
+        self._conn.send_command("SET MESSAGE ID", message_id)
+        
     ## Voice selection
 
     def set_voice_by_name(self, voice_name):
@@ -357,8 +334,7 @@ class TCPConnection(object):
         
     def current_voice(self):
         """Return VoiceDescription of the current voice."""
-        code, msg, data = self._conn.send_command("GET CURRENT VOICE")
-        raw = self._conn.parse_list(data)
+        code, msg, raw = self._conn.send_command("GET CURRENT VOICE")
         v = raw[0]
         assert len(raw) > 0
         voice_descr = \
@@ -511,7 +487,7 @@ class TCPConnection(object):
         """
         assert isinstance(host, str)
         assert isinstance(port, int) and port > 0
-        self._conn.send_command("SET AUDIO RETRIEVAL DESTINATION", host, port)
+        self._conn.send_command("SET AUDIO RETRIEVAL", host, port)
 
     # Callbacks
     
