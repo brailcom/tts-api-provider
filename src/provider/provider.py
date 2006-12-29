@@ -18,24 +18,76 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.3 2006-08-20 21:04:58 hanke Exp $
+# $Id: provider.py,v 1.4 2006-12-29 22:27:06 hanke Exp $
  
 """TTS API Provider core logic"""
 
 import sys
+import subprocess
+from copy import copy
+
 from ttsapi.structures import *
 from ttsapi.errors import *
-#from logs import log
+import ttsapi.client
+
+current_message_id = None
+
+class Driver(object):
+    """TTS API driver"""
+    "Name (id) of the driver"
+    name = None,
+    "Process object for the driver"
+    process = None,
+    "Communication object for the driver (ttsapi.Client object)"
+    com = None
+    "Audio output. One of 'playback', 'retrieval', 'emulated_playback'"
+    audio_output = 'emulated_playback'
+    "Real (without any emulateion) capabilities as reported by the driver"
+    real_capabilities = None
+    
+    def __init__(self, name, process, com):
+        """Init the main attributes"""
+        self.name = name
+        self.process = process
+        self.com = com
 
 class Provider(object):
     """TTS API implementation class (main process)
     """
 
-    def __init__ (self):
-        """Initialize the instance and connect to the server"""
-        pass
+    messages = []
+    _message_id_counter = 0
 
+    def __init__ (self, logger, configuration, audio):
+        """Initialize the instance, load all output modules"""
+        global log, conf
+        log = logger
+        conf = configuration
+        # Load all available drivers, fill in the self.drivers and self.current_driver attributes
+        self.audio = audio
+        self.loaded_drivers = {}
+        for name, executable in conf.available_drivers:
+            logfile = open(conf.log_dir+name+".log", "w")
+            
+            process = subprocess.Popen(args=[executable],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logfile)
+                # bufsize = 1 means line buffered
+            log.debug("Subprocess for driver" + name + "initalized")
+            self.loaded_drivers[name] = Driver(process=process, name=name,
+                com = ttsapi.client.TCPConnection(method = 'pipe',
+                    pipe_in = process.stdout, pipe_out = process.stdin, logger=log))
+            log.debug("Driver instance for driver" + name + "created")
+            self.loaded_drivers[name].com.init()
+            log.debug("Driver instance for driver" + name + "initalized")
+            self.loaded_drivers[name].real_capabilities \
+               = self.loaded_drivers[name].com.driver_capabilities()
+        if self.loaded_drivers.has_key(conf.default_driver):
+            self.current_driver = self.loaded_drivers[conf.default_driver]
+        else:
+            raise "Default module not available, no module loaded!"
+                
     def init(self):
+        """Called on the INIT TTS API command."""
         raise ErrorInvalidCommand
     
     # Driver discovery
@@ -44,7 +96,7 @@ class Provider(object):
         """Return a list of DriverDescription objects containing
         information about the available drivers
         """
-        raise ErrorNotSupportedByServer
+        return self.current_driver.com.drivers()
         
     def driver_capabilities (self):
         """Return a DriverCapabilities object for the
@@ -52,7 +104,14 @@ class Provider(object):
 
         Arguments:
         """
-        pass
+        capabilities = copy(self.current_driver.real_capabilities)
+        
+        # If retrieval is available, then by emulation also playback
+        # is available
+        if 'retrieval' in capabilities.audio_methods:
+            capabilities.audio_methods.append('playback')
+            
+        return capabilities
 
     def voices (self):
         """Return a list of voices available to the given
@@ -60,15 +119,37 @@ class Provider(object):
 
         Arguments:
         """
-        return [["kal", 'en', 'nil', 'MALE', 30],
-                ["ked", 'en', 'nil', 'MALE', 30],
-                ["czech_ph", 'cs', 'nil', 'MALE', 30],
-                ["el_diphone", 'es', 'nil', 'MALE', 48],
-                ["lp_diphone", 'it', None, 'MALE', 30],
-                ["pc_diphone", 'it', None, 'FEMALE', 30]
-                ]
-
+        return self.current_driver.com.voices()
+        
     # Speech Synthesis commands
+
+    def _prepare_for_message(self, message_id):
+        """Prepare the driver and possibly audio output for synthesis
+        of a new message in the driver."""
+
+        # Put the message_id into our list of processed messages.
+        # (In the head of the list for performance reasons.)
+        
+        # If we are emulating playback, let the audio server
+        # know there will be an incomming message and set the
+        # proper destination on the driver.
+        if self.current_driver.audio_output == 'emulated_playback':
+            self.audio.post_event('accept', message_id)
+            try:
+                self.current_driver.com.set_audio_retrieval_destination(host=self.audio.host,
+                    port=self.audio.port)
+            except TTSAPIError, error:
+                log.error("Error in output module: " + str(error))
+                raise DriverError
+
+    def _new_message_id(self):
+        """Create a new message"""
+        global current_message_id
+        self._message_id_counter += 1
+        self.messages.insert(0,self._message_id_counter)
+        current_message_id = self._message_id_counter
+        return self._message_id_counter
+               
 
     def say_text (self, text, format='plain',
                   position = None, position_type = None,
@@ -101,8 +182,21 @@ class Provider(object):
         assert index_mark == None or isinstance(index_mark, str)
         assert character == None or isinstance(character, int)
 
-        pass
+        message_id = self._new_message_id()
+        self.current_driver.com.set_message_id(message_id)
+        self._prepare_for_message(message_id)
+
+        # TODO: This will be handled by loadable modules
+        # in the future
+        # Plain text emulation
+        if format == 'plain':
+            text = "<speak>" + text + "</speak>"
+            format = 'ssml'
+                
+        self.current_driver.com.say_text(text, format, position, position_type,
+                                         index_mark, character)
         
+        return message_id
         
     def say_deferred (self, message_id,
                       format='plain',
@@ -122,13 +216,7 @@ class Provider(object):
         assert index_mark == None or isinstance(index_mark, str)
         assert character == None or isinstance(character, int)
 
-        print "say_deferred called with message_id " + str(message_id) \
-              + " position " + str(position) + " pos_type " \
-              + str(position_type) + " index mark " + str(index_mark) + " character "  \
-              + str(character)
-        
-
-        pass
+        raise NotImplementedError
 
     def say_key (self, key):
         """Synthesize a key event.
@@ -138,7 +226,14 @@ class Provider(object):
         in TTS API          
         """
         assert isinstance(key, str)
-        pass
+        message_id = self._new_message_id()
+        self.current_driver.com.set_message_id(message_id)
+        self._prepare_for_message(message_id)
+                
+        self.current_driver.com.say_key(key)
+        
+        return message_id
+        
         
     def say_char (self, character):
         """Synthesize a character event.
@@ -146,8 +241,16 @@ class Provider(object):
         Arguments:
         character -- a single UTF-32 character.          
         """
+        assert isinstance(character, str)
         assert len(character) == 1
-        pass
+
+        message_id = self._new_message_id()
+        self.current_driver.com.set_message_id(message_id)
+        self._prepare_for_message(message_id)
+                
+        self.current_driver.com.say_char(character)
+        
+        return message_id
         
     def say_icon (self, icon):
         """Synthesize a sound icon.
@@ -156,17 +259,31 @@ class Provider(object):
         icon -- name of the icon as defined in TTS API.          
         """
         assert isinstance(icon, str)
-        pass
+        
+        message_id = self._new_message_id()
+        self.current_driver.com.set_message_id(message_id)
+        self._prepare_for_message(message_id)
+        
+        self.current_driver.com.say_icon(icon)
+        
+        return message_id
         
     # Speech Controll commands
 
     def cancel (self):
         """Cancel current synthesis process and audio output."""
-        pass
+
+        log.debug("Cancelling current message (id == "+str(current_message_id)+")")
+        # Cancel playback in audio
+        # Strictly speaking, we should only do this if 'emulated_playback' is used
+        if current_message_id != None:
+            self.audio.post_event('stop', current_message_id)
+        # NOTE: We are not waiting until the cancel is completed in the driver
+        return self.current_driver.com.cancel()
         
     def defer (self):
         """Defer current message."""
-        pass
+        return self.current_driver.com.defer()
         
     def discard (self, message_id):
         """Discard a previously deferred message.
@@ -175,7 +292,7 @@ class Provider(object):
         message_id -- unique identification of the message to discard          
         """
         assert isinstance(message_id, int)
-        pass
+        return self.current_driver.com.discard(message_id)
         
     # Parameter settings
 
@@ -188,8 +305,17 @@ class Provider(object):
         driver_id -- id of the driver as returned by drivers()
         """
         assert isinstance(driver_id, str)
-        pass
-
+        if self.loaded_drivers.has_key(driver_id):
+            self.current_driver = self.loaded_drivers[driver_id]
+            log.info("Driver switched to " + driver_id)
+        else:
+            raise ErrorDriverNotLoaded
+    
+    def set_message_id(self, message_id):
+        """Set an identification number for the next message. Invalid in server,
+        only used for communication with output modules."""
+        raise ErrorInvalidCommand
+    
     ## Voice selection
 
     def set_voice_by_name(self, voice_name):
@@ -199,7 +325,7 @@ class Provider(object):
         voice_name -- name of a voice as obtained by voices()          
         """
         assert isinstance(voice_name, str)
-        pass
+        self.current_driver.com.set_voice_by_name(voice_name)
         
     def set_voice_by_properties(self, voice_description, variant):
         """Choose and set a voice best matching the given description.
@@ -211,14 +337,12 @@ class Provider(object):
         """
         assert isinstance(voice_description, VoiceDescription)
         assert isinstance(variant, int)
-
-        pass
+        self.current_driver.com.set_voice_by_name(voice_description)
         
     def current_voice(self):
         """Return VoiceDescription of the current voice."""
-        pass
+        return self.current_driver.com.current_voice()
         
-
     ## Prosody parameters
         
     def set_rate(self, rate, method='relative'):
@@ -231,13 +355,13 @@ class Provider(object):
         method -- either 'relative' or 'absolute'          
         """
         assert isinstance(rate, int)
-        pass
+        self.current_driver.com.set_rate(rate, method)
         
     def default_absolute_rate(self):
         """Returns default absolute rate for the given voice
         as a positive number in words per minute.
         """
-        pass
+        return self.current_driver.com.default_absolute_rate()
         
     def set_pitch(self, pitch, method='relative'):
         """Set relative or absolute pitch.
@@ -249,13 +373,13 @@ class Provider(object):
         method -- either 'relative' or 'absolute'          
         """
         assert isinstance(pitch, int)
-        pass
+        return self.current_driver.com.set_pitch(rate, method)
         
     def default_absolute_pitch(self):
         """Returns default absolute pitch for the given voice
         as a positive number in Hertzs.
         """
-        pass
+        return self.current_driver.com.default_absolute_pitch()
         
     def set_pitch_range(self, range, method='relative'):
         """Set relative or absolute pitch range.
@@ -279,26 +403,24 @@ class Provider(object):
         method -- either 'relative' or 'absolute'          
         """
         assert isinstance(volume, int)
-        pass
+        raise NotImplementedError
         
     def default_absolute_volume(self):
         """Returns default absolute volume for the given voice
         as a positive number between 0 and 100.
         """
         assert len(data) > 0
-        pass
+        raise NotImplementedError
 
     ## Style parameters
 
     def set_punctuation_mode(self, mode):
         """Set punctuation reading mode.
-
-
         Arguments:
-        mode -- one of 'none', 'all', 'some'          
+        mode -- one of 'none', 'all', 'some'
         """
         assert mode in ('none', 'all', 'some')
-        pass
+        self.current_driver.com.set_punctuation_mode(mode)
 
     def set_punctuation_detail(self, detail):
         """Set punctuation detail.
@@ -308,7 +430,7 @@ class Provider(object):
         should be explicitly indicated by the synthesizer          
         """
         assert isinstance(detail, str)
-        pass
+        self.current_driver.com.set_punctuation_detail(detail)
 
     def set_capital_letters_mode(self, mode):
         """Set mode for reading capital letters.
@@ -327,7 +449,7 @@ class Provider(object):
         specifying how many digits should be read together          
         """
         assert isinstance(grouping, int)
-        pass
+        self.current_driver.com.set_number_grouping(grouping)
 
     # Dictionaries
     
@@ -344,7 +466,19 @@ class Provider(object):
         method -- one of 'playback', 'retrieval'          
         """
         assert method in ('playback', 'retrieval')
-        pass
+        # if possible, do not use output modules own playback
+        # but use retrieval and do audio output here
+        if method == 'playback':
+            if 'retrieval' in self.current_driver.real_capabilities:
+                self.current_driver.com.set_audio_output('retrieval')
+                self.current_driver.audio_output = 'emulated_playback'
+            else:
+                self.current_driver.com.set_audio_output('playback')
+                self.current_driver.audio_output = 'playback'
+        elif method == 'retrieval':
+            self.current_driver.com.set_audio_output('retrieval')
+            self.current_driver.audio_output = 'retrieval'
+        
 
     def set_audio_retrieval_destination(self, host, port):
         """Set destination for audio retrieval socket.
@@ -356,7 +490,7 @@ class Provider(object):
         """
         assert isinstance(host, str)
         assert isinstance(port, int) and port > 0
-        pass
+        self.current_driver.com.set_audio_retrieval_destination(host, port)
 
     # Callbacks
     
