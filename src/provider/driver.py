@@ -2,29 +2,36 @@ import sys
 import threading
 import time
 import logging
+import socket
 import ttsapi
 from copy import copy
 
+import audio
+
 from ttsapi.structures import *
 from ttsapi.errors import *
+from event import Event
 
 # Log, initialized in main_loop or by the driver
 log = None
 
+
 class RetrievalSocket(object):
-    _host = None
-    _port = None
+    """Class for handling the TTS API audio retrieval socket from inside the driver."""
+    host = None
+    port = None
     
-    def open(self, host, port):
+    def __init__(self, host, port):
         """Open socket to target or raise exception if impossible
         host -- host name or IP address as a string
         port -- a number representing the desired port"""
         assert isinstance(host, str)
         assert isinstance(port, int)
-        self. _host = host
-        self._port = port
+        self.host = host
+        self.port = port
 
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.connect((socket.gethostbyname(host), port))
 
     def close(self):
@@ -40,7 +47,7 @@ class RetrievalSocket(object):
         data_length = len(audio_data)
         assert isinstance(msg_id, int) and msg_id >= 0
         assert isinstance(block_number, int) and block_number >= 0
-        assert isinstance(data_format, string)
+        assert isinstance(data_format, str)
         assert isinstance(data_length, int)
         assert isinstance(audio_length, int)
         assert isinstance(sample_rate, int) or sample_rate == None
@@ -51,26 +58,38 @@ class RetrievalSocket(object):
         ENDLINE = "\r\n"
         
         # BLOCK identification and PARAMETERS block
-        message = ("BLOCK " + msg_id + " " + block_number + ENDLINE
+        message = ("BLOCK " + str(msg_id) + " " + str(block_number) + ENDLINE
          + "PARAMETERS" + ENDLINE
-         + "data_format="+data_format+ENDLINE
-         + "data_length="+data_length+ENDLINE
-         + "audio_lenth="+audio_length+ENDLINE)
+         + "data_format "+data_format+ENDLINE
+         + "data_length "+str(data_length)+ENDLINE
+         + "audio_lenth "+str(audio_length)+ENDLINE)
          
         if sample_rate:
-            message += "sample_rate="+sample_rate+ENDLINE
+            message += "sample_rate "+str(sample_rate)+ENDLINE
         if channels:
-            message += "channels="+channels+ENDLINE
+            message += "channels "+str(channels)+ENDLINE
         if encoding:
-            message += "encoding="+encoding+ENDLINE
+            message += "encoding "+encoding+ENDLINE
         message += "END OF PARAMETERS" + ENDLINE
         
         # EVENTS block
-        message += "EVENTS"+ENDLINE
-        for type, text_position, audio_position in events:
-            message += type + text_position + audio_position + ENDLINE
-        message += "END OF EVENTS"+ENDLINE
-        
+        if event_list != None and len(event_list)!=0:
+            message += "EVENTS"+ENDLINE
+            for event in event_list:
+                if event.type in ('message_start', 'message_end'):
+                    message += event.type + " " + str(event.pos_text) + " " \
+                               + str(int(event.pos_audio)) + ENDLINE
+                elif event.type in ('word_start', 'word_end', 'sentence_start',
+                                    'sentence_end'):
+                    message += event.type + " " + str(event.n) + " " \
+                               + str(event.pos_text)  + " " \
+                               + str(int(event.pos_audio)) + ENDLINE
+                elif event.type == 'index_mark':
+                    message += event.type + ' "' + event.name + '" ' \
+                               + str(event.pos_text)  + " " \
+                               + str(int(event.pos_audio)) + ENDLINE
+            message += "END OF EVENTS"+ENDLINE
+            
         # DATA block
         message += "DATA"+ENDLINE
         message += audio_data
@@ -83,23 +102,29 @@ class Core(object):
     """Core of the driver, takes care of TTS API communication etc."""
 
     controller = None
+    _message_id = None
     
     def __init__ (self):
         """Initialize the instance"""
     # Initialization
 
     def set_controller(self, controller):
+        """Set the controller object. Its run() method will be started
+        in a separate thread. See Controller for more information.
+        
+        This method must be run before the Core.init() method."""
         self.controller = controller
-        
+
     def init(self):
-        """Init the driver (connecto to server etc.)"""
-        thread.start_new_thread(self.controller.run, ())
-        
+        """Init the driver, start the Controller thread etc."""
+        if self.controller != None:
+            log.info("Starting the controller thread.")
+            thread.start_new_thread(self.controller.run, ())
     # Driver discovery
 
     def drivers(self):
         """Report information about this driver"""
-        return DriverDescription
+        return DriverDescription()
     
     def driver_capabilities (self):
         """Return a DriverCapabilities object for the
@@ -122,8 +147,7 @@ class Core(object):
     def say_text (self, text, format='plain',
                   position = None, position_type = None,
                   index_mark = None, character = None):
-        """Synthesize the whole message of given format
-        from the given position.
+        """Send the synthesis request to the Controller thread.
 
         Arguments:
         format -- either 'plain' or 'ssml'
@@ -152,16 +176,20 @@ class Core(object):
         
         if not self.controller:
             raise ErrorNotSupportedByDriver
-            
+        
         event.set(type='say_text', text=text, format=format, position=position,
-            position_type=position_type, index_mark = index_mark, character = character)
+            position_type=position_type, index_mark = index_mark, character = character,
+                  message_id=self._message_id)
+        #self._message_id = None
         event_ctl.set()
+        
+        return self._message_id
       
     def say_deferred (self, message_id,
                       format='plain',
                       position = None, position_type = None,
                       index_mark = None, character = None):        
-        """Synthesize the whole message deffered message.
+        """Send the synthesis request to the controller thread.
 
         Arguments:
         message_id -- unique identification number of the message
@@ -181,9 +209,10 @@ class Core(object):
         event.set(type='say_deferred', message_id=message_id, position=position, 
             position_type=position_type, index_mark = index_mark, character = character)
         event_ctl.set()
+    
         
     def say_key (self, key):
-        """Synthesize a key event.
+        """Send the key synthesis request to the controller thread.
 
         Arguments:
         key -- a string containing a key identification as defined
@@ -193,11 +222,15 @@ class Core(object):
         
         if not self.controller:
             raise ErrorNotSupportedByDriver
-        event.set(type='say_key', key=key)
+        
+        event.set(type='say_key', text=key, message_id=self._message_id)
+        #self._message_id = None
         event_ctl.set()
         
+        return self._message_id
+        
     def say_char (self, character):
-        """Synthesize a character event.
+        """Send the character synthesis request to the controller thread.
 
         Arguments:
         character -- a single UTF-32 character.          
@@ -205,34 +238,42 @@ class Core(object):
         assert len(character) == 1
         if not self.controller:
             raise ErrorNotSupportedByDriver
-      
-        event.set(type='say_char', key=key)
+        
+        event.set(type='say_char', text=character, message_id=self._message_id)
+        #self._message_id = None
         event_ctl.set()
         
+        return self._message_id
+        
     def say_icon (self, icon):
-        """Synthesize a sound icon.
+        """Send the sound icon synthesis request to the controller thread.
 
         Arguments:
         icon -- name of the icon as defined in TTS API.          
         """
         assert isinstance(icon, str)
-        
+
         if not self.controller:
             raise ErrorNotSupportedByDriver
-        event.set(type='say_icon', icon=icon)
+        
+        event.set(type='say_icon', text=icon, message_id=self._message_id)
+        #self._message_id = None
         event_ctl.set()
+        
+        return self._message_id
         
     # Speech Controll commands
 
     def cancel (self):
-        """Cancel current synthesis process and audio output."""
+        """Cancel current synthesis process and audio output.
+        Sends the request to the controller thread."""
         if not self.controller:
             raise ErrorNotSupportedByDriver
         event.set(type='cancel')
         event_ctl.set()
     
     def defer (self):
-        """Defer current message."""        
+        """Defer current message. Sends the defer request to the controller thread."""        
         if not self.controller:
             raise ErrorNotSupportedByDriver
         event.set(type='defer')
@@ -240,7 +281,7 @@ class Core(object):
         
     def discard (self, message_id):
         """Discard a previously deferred message.
-
+        Sends the discard request to the controller thread.
         Arguments:
         message_id -- unique identification of the message to discard          
         """
@@ -263,6 +304,10 @@ class Core(object):
         assert isinstance(driver_id, str)
         raise ErrorNotSupportedByDriver
 
+    def set_message_id(self, message_id):
+        """Set the identification number for the next message"""
+        self._message_id = message_id
+        
     ## Voice selection
 
     def set_voice_by_name(self, voice_name):
@@ -434,55 +479,7 @@ class Core(object):
         assert isinstance(port, int) and port > 0
         raise ErrorNotSupportedByDriver
 
-
 # ----------------------------------------------------------------
-
-class Event(object):
-    """Class for passing events between the Core and the Controller thread."""
-    
-    _attributes = {
-        'type': ("Type of the event",
-            ("say_text", "say_deferred", "say_key", "say_icon", "cancel", "defer", "discard")),
-        'text': ("Text of message",  ("say_text",)),
-        'format': ("Format of the message (event say_text)", ("say_text",)),
-        'position': ("Position in text", ("say_text", "say_deferred")),
-        'position_type': ("Type of position", ("say_text", "say_deferred")),
-        'index_mark': ("Index mark position", ("say_text", "say_deferred")),
-        'character': ("Character position", ("say_text", "say_deferred")),
-        'key': ("Key to speak", ("say_key",)),
-        'icon': ("Icon to speak", ("say_icon",)), 
-        'message_id': ("ID of message to speak", ("say_deferred", "defer"))
-    }
-    
-    def __init__(self):
-        self.lock = threading.Lock()
-        self.clear()
-    
-    def safe_read(self):
-        """Get the current value of the event"""
-        self.lock.acquire()
-        ret = copy(self)
-        self.lock.release()
-        return ret
-        
-    def clear(self):
-        for a in self._attributes:
-            setattr(self, a[0], None)
-    
-    def set(self, **args):
-        """Set a value of the event"""
-        self.lock.acquire()
-        self.clear()
-        if not args.has_key('type'):
-            raise UnknownError
-        type_arg = args['type']
-        for name, value in args.iteritems():
-            if not self._attributes.has_key(name):
-                raise "Invalid attribute"
-            if type_arg not in self._attributes[name][1]:
-                raise "This argument is not allowed for this message type or invalid message type"
-            setattr(self, name, value)
-        self.lock.release()
 
 class Controller(threading.Thread):
     """Controlls the speech synthesis process in a separate thread"""
@@ -492,7 +489,7 @@ class Controller(threading.Thread):
         event = Event()
         event_ctl = threading.Event()
         event.clear() # Put in default None values
-        threading.Thread.__init__(self, group=None, name="driver_thread")
+        threading.Thread.__init__(self, name="Controller")
         self.start()
 
     def wait_for_event(self):
@@ -506,18 +503,20 @@ class Controller(threading.Thread):
         return ret
         
     def run(self):
-        print "Thread running!"
+        log.debug("Driver thread running!")
         while True:
             self.wait_for_event()
             e = self.last_event()
             if e.type == 'say_text':
-                self.say_text(e.text, e.format, e. position, e.position_type, e.index_mark, e.character)
+                self.say_text(e.text, e.format, e. position, e.position_type, e.index_mark, e.character, e.message_id)
             elif e.type == 'say_deferred':
                 self.say_deferred(e.message_id, e. position, e.position_type, e.index_mark, e.character)
+            elif e.type == 'say_char':
+                self.say_char(e.text, e.message_id)
             elif e.type == 'say_key':
-                self.say_key(e.key)
+                self.say_key(e.text, e.message_id)
             elif e.type == 'say_icon':
-                self.say_icon(e.icon)
+                self.say_icon(e.text, e.message_id)
             elif e.type == 'cancel':
                 self.cancel()
             elif e.type == 'defer':
@@ -637,17 +636,26 @@ class Configuration(object):
 def main_loop(Core, Controller):
     """Main function and core read-process-notify loop of a driver"""
     global log
+    
+    # Initialize logging to stderr.
     log = logging.Logger('tts-api-driver', level=logging.DEBUG)
-    log_formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    log_formatter = logging.Formatter("%(asctime)s %(threadName)s %(levelname)s %(message)s")
     log_handler = logging.StreamHandler(sys.stderr)
     log_handler.setFormatter(log_formatter)
     log.addHandler(log_handler)
     
+    # Initialize driver Core
     driver_core = Core()
-    driver_core.set_controller(Controller())
-    
+    # Initialize driver controller and attach it to the Core
+    if Controller != None:
+        driver_core.set_controller(Controller())
+
+    # Create communication interface as TTS API server
+    # over text protocol pipes (stdin, stdout, stderr)
     driver_comm = ttsapi.server.TCPConnection(provider=driver_core,
                                               logger=log, method='pipe')
 
     while True:
+        # Process input, call appropriate Core and Controller functions
+        # according to TTS API specifications
         driver_comm.process_input()
