@@ -1,3 +1,105 @@
+2006-12-29  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/ttsapi/structures.py (AudioEvent): New structure.
+	(VoiceDescription._attributes): Minor fixes.
+
+	* src/ttsapi/server.py (TCPConnection): Expanded according
+	to TTS API docs.
+	(TCPConnection.__init__): New error defined DriverError.
+	Improved debugging.
+
+	* src/ttsapi/errors.py (_CommunicationError): New exception.
+	(_CommunicationError): New exception.
+	(ErrorDriverNotLoaded): New exception.
+	(ErrorRetrievalSocketNotInitialized): New exception.
+
+	* src/ttsapi/connection.py (parse_list): Moved out from Connection.
+	(SocketConnection.__init__): Initialize logger.
+	(SocketConnection.read_data): New method.
+	(PipeConnection.NEWLINE): Newline changed to \r\n !!!
+	(PipeConnection._write): flush.
+
+	* src/ttsapi/client.py (_CommunicationError): Moved to errors.py
+	(TCPConnection): Other changes/updates.
+
+	* src/provider/server.py (audio_event_delivery): New function.
+	(main): Init audio system.
+	(main): Start new thread for each client.
+
+	* src/provider/provider.py: import subprocess
+	(Driver): New class.
+	(Provider.__init__): Load drivers.
+	(Provider.driver_capabilities): Playback emulation via retrieval.
+	(Provider._new_message_id): New method.
+	(Provider.say_text): Basic SSML emulation for input in plain text.
+	(Provider): Basic functionality implemented.
+	(Provider.set_message_id): New method.
+
+	* src/provider/logs.py (Logging.init_stage2): Don't create
+	the log object.
+
+	* src/provider/events.py: New file. Events handling.
+
+	* src/provider/festival.py: Basic driver functionality
+	completed.
+
+	* src/provider/driver.py: import audio.
+	(RetrievalSocket.host): _host, _port renamed to host, port.
+	(RetrievalSocket.__init__): open renamed to _init_
+	(RetrievalSocket.send_data_block): Removed '=' signs from audio
+	description block.
+	(RetrievalSocket.send_data_block): Construct event list.
+	Handling of events modified (see diff).
+	(main_loop): Log formatter changed to include threadName.
+	(main_loop): Comments.
+
+	* src/provider/configuration.py (Configuration._conf_options): New
+	options: audio_port, available_drivers, default_driver.
+	(Configuration.__init__): Initialize logger.
+	(Configuration.__init__): Don't create configuration.
+
+	* src/provider/audio.py: New file. Audio susbsystem.
+
+2006-10-29  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/provider/server.py (main): threading used instead of thread to
+	invoke provider threads.
+
+	* (): MANY changes not logged in here because they constitute
+	entirely new code or bigger rewrites in these early
+	stages.
+	
+	* src/provider/logs.py (Logging.set_prefix): New method.
+
+2006-08-21  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/ttsapi/structures.py (Structure.attributes_dictionary):
+	Bugfix.
+	(_attributes): Fixes in attributes list.
+	(VoiceDescription): VoiceDescription is now a Structure.
+	(VoiceDescription._attributes): Removed default values, all are
+	now None.
+
+	* src/ttsapi/server.py (TCPConnection.__init__): Added missing reply
+	tuples into self.commands_map.
+	(TCPConnection.__init__): Added definitions for SAY TEXT * commands.
+	(TCPConnection._list_drivers_reply): New function.
+	(TCPConnection._list_voices_reply): New function.
+	(TCPConnection._driver_capabilities_reply): Bugfix.
+	(TCPConnection._driver_capabilities_reply): Handle nested lists correctly.
+	(TCPConnection.process_input): SAY TEXT * commands handling reworked.
+
+	* src/ttsapi/connection.py (Connection._arg_to_str): Put quotes
+	around strings that include spaces.
+	(PipeConnection.__init__): logger argument added.
+
+	* src/provider/provider.py (Provider.init): New method.
+	(driver_capabilities): driver_id argument removed.
+	(Provider.voices): driver_id argument removed.
+
+	* src/provider/festival.py: New file -- festival driver.
+
+	* src/provider/driver.py: New file -- python driver base classes.
 2006-08-09  Hynek Hanke  <hanke@brailcom.org>
 
 	* src/ttsapi/structures.py: Correct FSF address.
