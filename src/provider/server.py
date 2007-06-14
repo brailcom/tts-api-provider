@@ -2,7 +2,7 @@
 #
 # server.py - Server core
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: server.py,v 1.3 2006-12-29 22:32:47 hanke Exp $
+# $Id: server.py,v 1.4 2007-06-14 13:01:10 pdm Exp $
 
 import sys
 import socket
@@ -74,7 +74,8 @@ def audio_event_delivery():
     to the appropriate clients"""
 
     while True:
-#TODO:        
+        #TODO:
+        pass
 
 def main():
     """Initialization, configuration reading, start of server
