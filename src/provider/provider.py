@@ -1,7 +1,7 @@
 #
 # tts-api.py - Python implementation of TTS API
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.4 2006-12-29 22:27:06 hanke Exp $
+# $Id: provider.py,v 1.5 2007-06-16 18:03:23 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -55,16 +55,17 @@ class Provider(object):
     """TTS API implementation class (main process)
     """
 
-    messages = []
-    _message_id_counter = 0
+    _connection = None
 
-    def __init__ (self, logger, configuration, audio):
+    def __init__ (self, logger, configuration, audio,
+                  global_state):
         """Initialize the instance, load all output modules"""
         global log, conf
         log = logger
         conf = configuration
         # Load all available drivers, fill in the self.drivers and self.current_driver attributes
         self.audio = audio
+        self.global_state = global_state
         self.loaded_drivers = {}
         for name, executable in conf.available_drivers:
             logfile = open(conf.log_dir+name+".log", "w")
@@ -89,6 +90,11 @@ class Provider(object):
     def init(self):
         """Called on the INIT TTS API command."""
         raise ErrorInvalidCommand
+
+    def set_connection(self, connection):
+        """Set the associated connection. Necessary for
+        dispatching audio events"""
+        self._connection=connection
     
     # Driver discovery
 
@@ -142,15 +148,6 @@ class Provider(object):
                 log.error("Error in output module: " + str(error))
                 raise DriverError
 
-    def _new_message_id(self):
-        """Create a new message"""
-        global current_message_id
-        self._message_id_counter += 1
-        self.messages.insert(0,self._message_id_counter)
-        current_message_id = self._message_id_counter
-        return self._message_id_counter
-               
-
     def say_text (self, text, format='plain',
                   position = None, position_type = None,
                   index_mark = None, character = None):
@@ -181,13 +178,15 @@ class Provider(object):
                                  'sentence_end', 'word_start', 'word_end')
         assert index_mark == None or isinstance(index_mark, str)
         assert character == None or isinstance(character, int)
+        global current_message_id
 
-        message_id = self._new_message_id()
+        current_message_id = message_id = self.global_state.new_message_id(self)
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
 
         # TODO: This will be handled by loadable modules
         # in the future
+        # TODO: Escape '<' and '>'
         # Plain text emulation
         if format == 'plain':
             text = "<speak>" + text + "</speak>"
@@ -225,8 +224,9 @@ class Provider(object):
         key -- a string containing a key identification as defined
         in TTS API          
         """
+        global current_message_id
         assert isinstance(key, str)
-        message_id = self._new_message_id()
+        current_message_id = message_id = self.global_state.new_message_id(self)
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
                 
@@ -243,8 +243,9 @@ class Provider(object):
         """
         assert isinstance(character, str)
         assert len(character) == 1
+        global current_message_id
 
-        message_id = self._new_message_id()
+        current_message_id = message_id = self.global_state.new_message_id(self)
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
                 
@@ -259,8 +260,9 @@ class Provider(object):
         icon -- name of the icon as defined in TTS API.          
         """
         assert isinstance(icon, str)
+        global current_message_id
         
-        message_id = self._new_message_id()
+        current_message_id = message_id = self.global_state.new_message_id(self)
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
         
@@ -278,6 +280,7 @@ class Provider(object):
         # Strictly speaking, we should only do this if 'emulated_playback' is used
         if current_message_id != None:
             self.audio.post_event('stop', current_message_id)
+            
         # NOTE: We are not waiting until the cancel is completed in the driver
         return self.current_driver.com.cancel()
         
@@ -493,9 +496,19 @@ class Provider(object):
         self.current_driver.com.set_audio_retrieval_destination(host, port)
 
     # Callbacks
-    
+
+    def dispatch_audio_event(self, event):
+        """Method to be called whenever an audio
+        event is available. Takes care of dispatching
+        the audio event through the associated connection."""
+        self._connection.send_audio_event(event)
+        
     def register_callback(self, callback):
-        """Register a function to be called whenever
+        """DEPRECATED: This is useful in TTS API implementation
+        for applications, but here internally, dispatch_audio_event
+        method is used.
+
+        Register a function to be called whenever
         an event is received from server (message begin/end,
         word start/end etc). This function will be called asynchronously
         from a separate thread without any additional synchronization
@@ -523,5 +536,4 @@ class Provider(object):
         the name of the index mark as a string otherwise it contains
         the value None          
         """
-        # TODO: Implement asynchronicity and callbacks
         raise ErrorNotImplemented
