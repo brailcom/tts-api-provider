@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: logs.py,v 1.2 2006-12-29 22:23:37 hanke Exp $
+# $Id: logs.py,v 1.3 2007-06-16 18:02:09 hanke Exp $
 
 import logging
 import sys

@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: structures.py,v 1.4 2006-12-29 22:40:28 hanke Exp $
+# $Id: structures.py,v 1.5 2007-06-16 18:03:44 hanke Exp $
 
 
 class Structure (object):

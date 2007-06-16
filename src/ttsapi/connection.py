@@ -1,7 +1,7 @@
 #
 # tts-api.py - Python implementation of TTS API
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -18,13 +18,15 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.4 2006-12-29 22:36:44 hanke Exp $
+# $Id: connection.py,v 1.5 2007-06-16 18:03:37 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
-import socket;
-import string;
-import sys;
+import socket
+import string
+import sys
+import threading
+import thread
 
 from errors import *
 
@@ -252,6 +254,8 @@ class SocketConnection(Connection):
         
         Connection.__init__(self, logger=logger)
         #self.logger = logger
+
+        self._lock = thread.allocate_lock()
         
         if socket==None:
             if self.logger:
@@ -308,11 +312,15 @@ class SocketConnection(Connection):
 
         data -- contains the data to be written including the
         necessary newlines and carriage return characters."""
-        
+
+        self._lock.acquire()
         self._socket.send(data)
+        # WARNING: Seems not to bee needed, but may be cause
+        # of problems too. I don't know.
         #self._socket.flush()
         if self.logger: 
             self.logger.debug("Sent over socket: %s",  data)
+        self._lock.release()
         
     def fileno(self):
         return self._socket.fileno()

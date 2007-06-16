@@ -1,6 +1,6 @@
 # audio.py - Audio subsystem for TTS API Provider
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.1 2006-12-29 22:15:12 hanke Exp $
+# $Id: audio.py,v 1.2 2007-06-16 18:01:34 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -38,24 +38,42 @@ import pyopenal
 
 import event
 import ttsapi
+
 from ttsapi.connection import *
 from ttsapi.structures import AudioEvent
 from configuration import Configuration
 
-event_list = {}
-
 class PlaybackInfo(object):
+    """Information about playback of a track"""
     # datetime object
+
+    # Time when audio was started or None if not yet started playback
     started = None
-    # DateTime
+    
+    # Time when audio was stopped or None if not stopped
     # stopped = None
+
+    # If the track was rewinded, the rewinded time is saved here
     rewinded = datetime.timedelta()
+
+    # Audio source
     source = None
 
 # Dictionary of message_id:PlaybackInfo() entries
 messages_in_playback = {}
 
+# --- AUDIO FUNCTIONALITY ---
+
+class CtrlRequest(event.Event):
+    _attributes = {
+        'type': ("Type of the event",
+            ("accept", "play", "stop", "discard")),
+        'message_id': ("ID of the message",
+                       ("accept", "play", "stop", "discard"))
+    }
+
 class Audio(object):
+    """Audio output through Pyopenal"""
     awaiting_message_data = []
     sources = {} # dictionary message_id:source
     
@@ -65,48 +83,79 @@ class Audio(object):
         self.listener = pyopenal.Listener(44100)
         
     def accept(self, message_id):
-        if message_id not in self.awaiting_message_data:
-            log.debug("Adding message" +str(message_id)+"into awaiting_message_data :"
-                      +str(self.awaiting_message_data))
-            self.awaiting_message_data.append(message_id)
-        else:
+        """Accept a track for message_id. This function 
+        initializes the necessary data structures and tells
+        the audio server to wait for incomming data."""
+        
+        if message_id in self.awaiting_message_data:
             raise "Message already in accept list"
+
+        log.debug("Adding message" +str(message_id)+"into awaiting_message_data :"
+                  +str(self.awaiting_message_data))
+        self.awaiting_message_data.append(message_id)
         
         source = pyopenal.Source()
         self.sources[message_id] = source
         log.debug("Message " + str(message_id)  +" accepted for playback")
         
     def play(self, message_id):
-        if messages_in_playback.has_key(message_id):
-            log.debug("Message " + str(message_id) + " already under playback")
+        """Start playback of the given message_id. Do nothing if it is
+        already being played."""
 
+        if messages_in_playback.has_key(message_id):
+            pass
+
+        # Start playback
         source = self.sources[message_id]
         source.play()
 
-        if not messages_in_playback.has_key(message_id):
-            messages_in_playback[message_id] = PlaybackInfo()
-            messages_in_playback[message_id].source = source
+        # Save playback info
+        messages_in_playback[message_id] = PlaybackInfo()
+        messages_in_playback[message_id].source = source
         messages_in_playback[message_id].started = datetime.datetime.now()
         
         log.debug("Source for message " + str(message_id)  +" playing")
     
     def stop(self, message_id):
+        """Stop playback of track assigned to given message_id
+        and discard it (seee Audio.discard())"""
+
+        if not messages_in_playback.has_key(message_id):
+            raise "Message not in playback"
+
+        # Stop playback
+        source = self.sources[message_id]
+        source.stop()
+
+        # Remove playback info
+        del messages_in_playback[message_id]
+
+        # Discard this track
+        self.discard(message_id)
+
+    
+    def discard(self, message_id):
+        """Discard track assigned to message_id"""
+
+        # If still playing, stop
         if messages_in_playback.has_key(message_id):
-            source = self.sources[message_id]
-            source.stop()
-            del messages_in_playback[message_id]
+            self.stop(message_id)
+    
+        # Remove playback info, not awaiting data any more, remove source,
+        # clean-up
         self.awaiting_message_data.remove(message_id)
         del self.sources[message_id]
     
-    def discard(self, message_id):
-        self.stop(message_id)
-    
-    def add_data(self, message_id, data, format, sample_rate, channels, encoding):
-        log.debug("Adding data with length"+ str(len(data)))
+    def add_data(self, message_id, data, format, sample_rate,
+                 channels, encoding):
+        """Add new data to track assigned to message_id with the
+        given format, sample_rate, number of channels and encoding.
+        Currently only handles raw PCM."""
+        
+        log.debug("Adding data with length " + str(len(data)))
         if message_id not in self.awaiting_message_data:
             raise "Unknown data"
-            
-        #buffer = pyopenal.Buffer()
+
         if channels == 1:
             format = pyopenal.AL_FORMAT_MONO16
         elif channels == 2:
@@ -114,45 +163,61 @@ class Audio(object):
         else:
             raise "Unsupported number of channels " + str(channels)
 
+        # Generate a new buffer and fill it with the data
         buffer = pyopenal.alGenBuffers(1)
         pyopenal.alBufferData(buffer, format, data, sample_rate)
+
+        # Queue the buffer for the message_id track source
         source = self.sources[message_id]
         source.queue_buffers(buffer)
         log.debug("Data added for message " + str(message_id) )
+
+        # If state is not AL_PLAYING (playback ran out of data), we must first
+        # unqueue old buffers or otherwise playback would start from the
+        # beginning again.
+        # WARNING: This might be a problem for rewinding if done on audio level.
         state = source.get_state()
-        print str(state) +" "+ str(pyopenal.AL_PLAYING) +" "+ str(pyopenal.AL_STOPPED)
         if state != pyopenal.AL_PLAYING:
+            log.debug("Unqueueing audio data")
             # TODO: Unfortunatelly this is not supported in pyopenal, I've contacted
             # the author. It will hopefully be fixed later.
             #n = pyopenal.alGetSourcei(source, pyopenal.AL_BUFFERS_PROCESSED)
-            log.debug("Unqueueing audio data")
             # WARNING: ...so we just use a number that looks big enough, relying on
             # the fact that only already processed buffers are unqueued with the
             # Source.unqueue_buffers method
             source.unqueue_buffers(256)
             self.play(message_id)
-        
+
+
+# --- AUDIO SERVER IMPLEMENTATION ---
+
 def init(logger):
-    """Initialize all data structures and start the secondary thread"""
-    global audio_event, audio_event_ctl
+    """Initialize the audio subsystem."""
+    global audio_ctrl_request
+    global audio_events
     global conf, log
-    
+    global event_list
+
     log = logger
     conf = Configuration(logger=log)
-    audio_ctl_event = event.Event()
-    audio_ctl_event.attributes = {
-        'type': ("Type of the event",
-            ("accept", "play", "stop", "discard")),
-        'message_id': ("ID of the message", ("accept", "play", "stop", "discard"))
-    }
-    audio_ctl_event_ctl = threading.Event()
-    audio_ctl_event.clear() # Put in default None values
+
+    # Setup audio_ctrl_request for communication
+    # of the audio subsystem with outside world
+    event_list = {}
+    audio_ctrl_request = event.EventQueue()
+    audio_events = event.EventQueue()
+
+    # Start playback thread
     playback_thread = threading.Thread(target=playback,
                                     name="Audio-playback")
     playback_thread.start()
+
+    # Start audio events handling thread
     events_thread = threading.Thread(target=events,
                                        name="Audio-events")
     events_thread.start()
+
+    # Start connection handling thread
     connection_handling_thread = threading.Thread(target=connection_handling,
                                     name="Audio-connections")
     connection_handling_thread.start()
@@ -161,9 +226,12 @@ def init(logger):
     audio = Audio()
     
 def receive_data(socket):
+    """Receive a block of data as defined in TTS API
+    over socket"""
 
     header = socket.receive_line()
-    
+
+    # HEADER
     if len(header) != 3:
         raise "Bad syntax on audio socket"
     head = header[0]
@@ -175,7 +243,8 @@ def receive_data(socket):
     
     log.info("Receiving audio block number " + str(block_number)
     + " for message id " + str(msg_id))
-    
+
+    # PARAMETERS SECTION
     param_header = socket.receive_line()
     if param_header != ['PARAMETERS']:
         raise "Ommited PARAMETERS section on audio socket"
@@ -195,9 +264,12 @@ def receive_data(socket):
     
     if data_length == None:
         raise "Unspecified data length"
-    
+
+    # EVENTS SECTION
     event_header = socket.receive_line()
     event_lines = []
+    global event_list
+
     if not event_list.has_key(msg_id):
         event_list[msg_id] = []
     if event_header == ['EVENTS']:
@@ -211,8 +283,8 @@ def receive_data(socket):
             log.debug("Event line being processed:" + str(entry))
             if entry[0] in ('message_start', 'message_end'):
                 event_list[msg_id].append(AudioEvent(type=entry[0],
-                                                     pos_text=int(entry[1]),
-                                                     pos_audio=int(entry[2]),
+                                                     pos_text=int(entry[2]),
+                                                     pos_audio=int(entry[3]),
                                                      message_id=msg_id))
             elif entry[0] in ('word_start', 'word_end', 'sentence_start',
                               'sentence_end'):
@@ -226,16 +298,12 @@ def receive_data(socket):
                                                      name = entry[1],
                                                      pos_text = int(entry[2]),
                                                      pos_audio = int(entry[3]),
-                                                     message_id=msg_id))            
-    else:
-        event_liest = None
-        
-    if event_list != None:
+                                                     message_id=msg_id))
         data_header = socket.receive_line()
     else:
         data_header = event_header
-        
-    print data_header
+
+    # DATA SECTION
     if data_header != ['DATA']:
         raise "Missing DATA section"
     
@@ -246,11 +314,14 @@ def receive_data(socket):
     if data_footer != ['END', 'OF', 'DATA']:
         raise "Missing END OF DATA"
     
+    # Block of data read, add data to audio
     log.debug("OK data received, sending to audio")
-
     audio.add_data(msg_id, audio_data, "raw", sample_rate, 1, "S16_LE")
     
 def connection_handling():
+    """Handle incomming connections and read data into buffers
+    in a separate thread."""
+    
     log.info("Starting audio server")
 
     # Create server socket
@@ -287,13 +358,11 @@ def connection_handling():
                     log.info("Audio client on socket " + str(sock.fileno()) + " gone.")
                     client_list.remove(sock)        
 
-
 def playback():
+    """Listen for events and play tracks in a separate thread."""
 
     while True:
-        audio_ctl_event_ctl.wait()
-        audio_ctl_event_ctl.clear()
-        ev = audio_ctl_event.safe_read()
+        ev = audio_ctrl_request.pop()
         log.debug("Received event " + ev.type +" "+ str(ev.message_id))
         
         if ev.type == 'accept':
@@ -316,7 +385,7 @@ def events():
     # message_event.clear()
 
     while True:
-        log.debug("Loop in events")
+        #log.debug("Loop in events")
         now = datetime.datetime.now()
         # NOTE: This is roughly a day in miliseconds
         NOT_ASSIGNED = 86000000
@@ -335,7 +404,7 @@ def events():
                     message.rewinded += since_start
                     message.started = None
                 else:
-                    # If we detected stop in the last cycle already,
+                    # If we detected stop in the previous cycle already,
                     # there is no need to check events again
                     continue
                 
@@ -352,7 +421,7 @@ def events():
                     ms = (dte.days*24*3600 + dte.seconds)*1000 + dte.microseconds/1000
                     log.debug("For event " + event.type + " ms =" + str(ms))
                     if ms < 0:
-                        #TODO: dispatch event
+                        audio_events.push(event)
                         log.info("EVENT HERE")
                         event.dispatched=True
                     elif ms < min:
@@ -365,16 +434,17 @@ def events():
             # simultaneously play more than one message.
             # On each addition, the value of min must be
             # recalculated.
-            log.debug("Sleeping " + str(min/1000.0) + " ms")
+            # log.debug("Sleeping " + str(min/1000.0) + " ms")
             time.sleep(min/1000.0)
         else:
-            log.debug("Sleeping 10ms")
+            # log.debug("Sleeping 10ms")
             time.sleep(0.01)
 
             #TODO: Calculate callback timing errors, check the performance
-    
+
 def post_event(type, message_id):
-    log.debug("Posting event " + type +" "+ str(message_id))
-    audio_ctl_event.set(type = type, message_id = message_id)
-    audio_ctl_event_ctl.set()
+    """Post event to controll audio server"""
+    log.debug("Posting event " + type + " " + str(message_id))
+    audio_ctrl_request.push(CtrlRequest(type=type, message_id = message_id))
+    
     
