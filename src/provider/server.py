@@ -19,7 +19,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: server.py,v 1.5 2007-06-16 18:03:20 hanke Exp $
+# $Id: server.py,v 1.6 2007-06-16 20:27:36 hanke Exp $
 
 import sys
 import socket
@@ -111,7 +111,6 @@ def serve_client(method, global_state, socket=None):
             # TODO: Better client identification in log message
             log.debug("Client on socket " + str(socket) + " gone")
             break
-    return
 
 def audio_event_delivery(global_state):
     """Listens for events reported from audio server and send them
@@ -122,12 +121,11 @@ def audio_event_delivery(global_state):
         event = audio.audio_events.pop()
         provider = global_state._messages[event.message_id]
         provider.dispatch_audio_event(event)
-        
 
 def create_pid_file():
 
     try:
-        pidfile = open(conf.pidpath + "/" + conf.pidfile, 'rw')
+        pidfile = open(conf.pidpath + "/" + conf.pidfile, 'w')
     except:
         log.error("Can't create pid file")
         raise
