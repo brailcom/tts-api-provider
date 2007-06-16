@@ -31,9 +31,9 @@ class TCPConnection(object):
     """TTS API on server side"""
 
     def _quit(self):
-            #TODO: self.provider.quit()
-            self.conn.close()
-            raise ClientGone()
+        self.provider.quit()
+        self.conn.close()
+        raise ClientGone()
 
     def __init__(self, provider, logger, method='socket', client_socket=None):
         """Init the server side object for a new connection
@@ -361,7 +361,7 @@ class TCPConnection(object):
         """Compare command and template, return
         True if they match, otherwise False"""
         
-        for i in range(0, len(command)):
+        for i in range(0, min(len(command), len(template))):
             if isinstance (template[i], tuple):
                 if command[i] != 'nil':
                     try:
@@ -412,7 +412,7 @@ class TCPConnection(object):
         log.debug("|"+cmd[0]+"|")
         
         if cmd[0] == 'SAY':
-            if cmd[1] == 'TEXT':
+            if (len(cmd)>=2) and (cmd[1] == 'TEXT'):
                 self.last_cmd = cmd
                 self.conn.data_transfer_on()
                 self.conn.send_reply(204, 'OK RECEIVING DATA')
