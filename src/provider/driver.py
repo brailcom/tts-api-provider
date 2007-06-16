@@ -6,11 +6,29 @@ import socket
 import ttsapi
 from copy import copy
 
+import event
 import audio
 
 from ttsapi.structures import *
 from ttsapi.errors import *
-from event import Event
+
+
+class CtrlRequest(event.Event):
+    _attributes = {
+        'type': ("Type of the event",
+                 ("say_text", "say_deferred", "say_char","say_key", "say_icon",
+                  "cancel", "defer", "discard")),
+        'text': ("Text of message",  ("say_text","say_key", "say_char", "say_icon")),
+        'format': ("Format of the message", ("say_text",)),
+        'position': ("Position in text", ("say_text", "say_deferred")),
+        'position_type': ("Type of position", ("say_text", "say_deferred")),
+        'index_mark': ("Index mark position", ("say_text", "say_deferred")),
+        'character': ("Character position", ("say_text", "say_deferred")),
+        'message_id': ("ID of the message", ("say_text", "say_deferred", "say_char",
+                                             "say_key", "say_icon", "cancel", "defer",
+                                             "discard"))
+    }
+
 
 # Log, initialized in main_loop or by the driver
 log = None
@@ -76,19 +94,10 @@ class RetrievalSocket(object):
         if event_list != None and len(event_list)!=0:
             message += "EVENTS"+ENDLINE
             for event in event_list:
-                if event.type in ('message_start', 'message_end'):
-                    message += event.type + " " + str(event.pos_text) + " " \
-                               + str(int(event.pos_audio)) + ENDLINE
-                elif event.type in ('word_start', 'word_end', 'sentence_start',
-                                    'sentence_end'):
-                    message += event.type + " " + str(event.n) + " " \
-                               + str(event.pos_text)  + " " \
-                               + str(int(event.pos_audio)) + ENDLINE
-                elif event.type == 'index_mark':
-                    message += event.type + ' "' + event.name + '" ' \
-                               + str(event.pos_text)  + " " \
-                               + str(int(event.pos_audio)) + ENDLINE
-            message += "END OF EVENTS"+ENDLINE
+                code, event_line = \
+                      ttsapi.server.tcp_format_event(event)
+                message += event_line+ENDLINE
+            message += "END OF EVENTS" + ENDLINE
             
         # DATA block
         message += "DATA"+ENDLINE
@@ -142,6 +151,7 @@ class Core(object):
         driver_id -- identification of the driver
         """
         raise ErrorNotSupportedByDriver
+
     # Speech Synthesis commands
 
     def say_text (self, text, format='plain',
@@ -177,11 +187,11 @@ class Core(object):
         if not self.controller:
             raise ErrorNotSupportedByDriver
         
-        event.set(type='say_text', text=text, format=format, position=position,
+        ctrl_thread_requests.push(
+            CtrlRequest(type='say_text', text=text, format=format, position=position,
             position_type=position_type, index_mark = index_mark, character = character,
-                  message_id=self._message_id)
+                  message_id=self._message_id))
         #self._message_id = None
-        event_ctl.set()
         
         return self._message_id
       
@@ -206,9 +216,9 @@ class Core(object):
         if not self.controller:
             raise ErrorNotSupportedByDriver
       
-        event.set(type='say_deferred', message_id=message_id, position=position, 
-            position_type=position_type, index_mark = index_mark, character = character)
-        event_ctl.set()
+        ctrl_thread_requests.push(
+            CtrlRequest(type='say_deferred', message_id=message_id, position=position, 
+            position_type=position_type, index_mark = index_mark, character = character))        
     
         
     def say_key (self, key):
@@ -223,9 +233,9 @@ class Core(object):
         if not self.controller:
             raise ErrorNotSupportedByDriver
         
-        event.set(type='say_key', text=key, message_id=self._message_id)
+        ctrl_thread_requests.push(
+            CtrlRequest(type='say_key', text=key, message_id=self._message_id))
         #self._message_id = None
-        event_ctl.set()
         
         return self._message_id
         
@@ -239,9 +249,9 @@ class Core(object):
         if not self.controller:
             raise ErrorNotSupportedByDriver
         
-        event.set(type='say_char', text=character, message_id=self._message_id)
+        ctrl_thread_requests.push(
+            CtrlRequest(type='say_char', text=character, message_id=self._message_id))
         #self._message_id = None
-        event_ctl.set()
         
         return self._message_id
         
@@ -256,9 +266,9 @@ class Core(object):
         if not self.controller:
             raise ErrorNotSupportedByDriver
         
-        event.set(type='say_icon', text=icon, message_id=self._message_id)
+        ctrl_thread_requests.push(
+            CtrlRequest(type='say_icon', text=icon, message_id=self._message_id))
         #self._message_id = None
-        event_ctl.set()
         
         return self._message_id
         
@@ -269,15 +279,13 @@ class Core(object):
         Sends the request to the controller thread."""
         if not self.controller:
             raise ErrorNotSupportedByDriver
-        event.set(type='cancel')
-        event_ctl.set()
+        ctrl_thread_requests.push(CtrlRequest(type='cancel'))
     
     def defer (self):
         """Defer current message. Sends the defer request to the controller thread."""        
         if not self.controller:
             raise ErrorNotSupportedByDriver
-        event.set(type='defer')
-        event_ctl.set()
+        ctrl_thread_requests.push(CtrlRequest(type='defer'))
         
     def discard (self, message_id):
         """Discard a previously deferred message.
@@ -288,8 +296,7 @@ class Core(object):
         assert isinstance(message_id, int)
         if not self.controller:
             raise ErrorNotSupportedByDriver
-        event.set(type='discard', message_id=message_id)
-        event_ctl.set()
+        ctrl_thread_requests.push(CtrlRequest(type='discard', message_id=message_id))
         
     # Parameter settings
 
@@ -485,32 +492,22 @@ class Controller(threading.Thread):
     """Controlls the speech synthesis process in a separate thread"""
 
     def __init__(self):
-        global event, event_ctl
-        event = Event()
-        event_ctl = threading.Event()
-        event.clear() # Put in default None values
+        global ctrl_thread_requests
+
+        ctrl_thread_requests = event.EventPot()
         threading.Thread.__init__(self, name="Controller")
         self.start()
-
-    def wait_for_event(self):
-        """Wait for a new event"""
-        event_ctl.wait()
-        event_ctl.clear()
-        
-    def last_event(self):
-        """Return last event"""
-        ret = event.safe_read()
-        return ret
         
     def run(self):
         log.debug("Driver thread running!")
         while True:
-            self.wait_for_event()
-            e = self.last_event()
+            e = ctrl_thread_requests.pop()
             if e.type == 'say_text':
-                self.say_text(e.text, e.format, e. position, e.position_type, e.index_mark, e.character, e.message_id)
+                self.say_text(e.text, e.format, e. position, e.position_type,
+                              e.index_mark, e.character, e.message_id)
             elif e.type == 'say_deferred':
-                self.say_deferred(e.message_id, e. position, e.position_type, e.index_mark, e.character)
+                self.say_deferred(e.message_id, e. position, e.position_type,
+                                  e.index_mark, e.character)
             elif e.type == 'say_char':
                 self.say_char(e.text, e.message_id)
             elif e.type == 'say_key':
