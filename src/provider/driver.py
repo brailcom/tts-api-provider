@@ -1,4 +1,29 @@
+#
+# driver.py - Synthesis driver skeleton
+#   
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
+# 
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+# 
+# This software is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this package; see the file COPYING.  If not, write to
+# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA 02110-1301, USA.
+# 
+# $Id: driver.py,v 1.4 2007-06-16 20:26:35 hanke Exp $
+ 
+"""TTS API Provider core logic"""
+
 import sys
+import thread
 import threading
 import time
 import logging
@@ -129,6 +154,17 @@ class Core(object):
         if self.controller != None:
             log.info("Starting the controller thread.")
             thread.start_new_thread(self.controller.run, ())
+
+    def quit(self):
+        """Terminate the driver"""
+        log.info("Terminating");
+        #TODO: This causes a deadlock. Why?
+        #self.controller.quit()
+        #log.debug("Joining controller thread");
+        #self.controller.join()
+        log.debug("Exiting");
+        sys.exit(0)
+
     # Driver discovery
 
     def drivers(self):
@@ -522,6 +558,10 @@ class Controller(threading.Thread):
                 self.discard(e.message_id)
             else:
                 raise "Unknown event type"
+
+    def quit(self):
+        """Quit"""
+        thread.exit()
     
     def say_text (self, text, format='plain',
                  position = None, position_type = None,
