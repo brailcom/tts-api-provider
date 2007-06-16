@@ -18,13 +18,14 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.5 2007-06-16 18:03:37 hanke Exp $
+# $Id: connection.py,v 1.6 2007-06-16 20:28:58 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
 import socket
 import string
 import sys
+import os
 import threading
 import thread
 
@@ -150,14 +151,20 @@ class Connection(object):
         Raise an exception in case of error response (non 2xx code).
         
         """        
-        
+
         cmd = str.join(' ', [command,] + map(self._arg_to_str, args)) \
-              + self.NEWLINE
+            + self.NEWLINE
         self._write(cmd)
         code, msg, data = self._recv_response()
         if code/100 != 2:
             raise TTSAPIError(code, msg, cmd)
         return code, msg, parse_list(data)
+
+    def send_command_without_reply(self, command, *args):
+        """Send command but do not wait for reply, see send_command()"""
+        cmd = str.join(' ', [command,] + map(self._arg_to_str, args)) \
+              + self.NEWLINE
+        self._write(cmd)
 
     def send_reply(self, code, text, args = None):
         """Send reply to the client
@@ -327,7 +334,7 @@ class SocketConnection(Connection):
     
     def close (self):
         """Close the connection."""
-        socket.socket.close(self._socket)
+        socket.socket.shutdown(self._socket, os.O_RDWR)
         if self.logger:
             self.logger.debug("Socket connection closed")
 
