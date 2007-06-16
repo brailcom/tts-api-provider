@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.4 2007-06-16 18:03:32 hanke Exp $
+# $Id: client.py,v 1.5 2007-06-16 20:28:06 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -64,6 +64,10 @@ class TCPConnection(object):
     def init(self):
         """Initialize"""
         self._conn.send_command("INIT")
+
+    def quit(self):
+        """Quit"""
+        self._conn.send_command_without_reply("QUIT")
     
     def drivers (self):
         """Return a list of DriverDescription objects containing
