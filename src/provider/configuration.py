@@ -1,6 +1,6 @@
 # configuration.py - Configuration for TTS API Provider
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: configuration.py,v 1.2 2006-12-29 22:17:14 hanke Exp $
+# $Id: configuration.py,v 1.3 2007-06-16 18:01:45 hanke Exp $
 
 import logging
 from optparse import OptionParser
@@ -29,6 +29,30 @@ class Configuration(object):
 
     _conf_options = \
         {
+        'mode':
+            {
+                'descr' : "Mode of execution: single od daemon",
+                'doc' : None,
+                'type' : str,
+                'default' : 'daemon',
+                'command_line' : ('-m', '--mode')
+            },
+        'pidpath':
+            {
+                'descr' : "Path to the pid file",
+                'doc' : None,
+                'type' : str,
+                'default' : '/var/run/tts-api-provider/',
+                'command_line' : ('', '--pidpath')
+            },
+        'pidfile':
+            {
+                'descr' : "Name of pidfile inside pidpath",
+                'doc' : None,
+                'type' : str,
+                'default' : 'tts-api-provider.pid',
+                'command_line' : ('', '--pidfile')
+            },
         'port' :  
             {
                 'descr' : "Port for the server",
@@ -93,8 +117,15 @@ class Configuration(object):
                     'debug':logging.DEBUG
                 })
             },
-
-            'audio_port' :  
+        'audio_host' :  
+            {
+                'descr' : "Audio host (sink) for the server",
+                'doc' : None,
+                'type' : str,
+                'default' : "127.0.0.1",
+                'command_line' : ("", '--audio-host')
+            },
+        'audio_port' :  
             {
                 'descr' : "Audio port (sink) for the server",
                 'doc' : None,
@@ -103,7 +134,7 @@ class Configuration(object):
                 'check' : lambda x: x>0,
                 'command_line' : ('-a', '--audio-port')
             },
-            'available_drivers':
+        'available_drivers':
             {
                 'descr': "List of module names and their executables",
                 'doc':None,
@@ -111,7 +142,7 @@ class Configuration(object):
                 'default': [('festival',
                     '/home/hanke/cvs/tts-api-provider/src/provider/festival.py')]
             },
-            'default_driver':
+        'default_driver':
             {
                 'descr': "Default driver",
                 'doc':None,
