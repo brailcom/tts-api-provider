@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.5 2007-06-16 18:03:23 hanke Exp $
+# $Id: provider.py,v 1.6 2007-06-16 20:26:59 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -63,13 +63,13 @@ class Provider(object):
         global log, conf
         log = logger
         conf = configuration
-        # Load all available drivers, fill in the self.drivers and self.current_driver attributes
+        # Load all available drivers, fill in the self.drivers and
+        # self.current_driver attributes
         self.audio = audio
         self.global_state = global_state
         self.loaded_drivers = {}
         for name, executable in conf.available_drivers:
             logfile = open(conf.log_dir+name+".log", "w")
-            
             process = subprocess.Popen(args=[executable],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logfile)
                 # bufsize = 1 means line buffered
@@ -90,6 +90,16 @@ class Provider(object):
     def init(self):
         """Called on the INIT TTS API command."""
         raise ErrorInvalidCommand
+
+    def quit(self):
+        """Terminate all child threads and processes and exit"""
+
+        log.info("Terminaning all loaded drivers")
+    
+        #for driver in self.loaded_drivers.iteritems():
+        #    driver[1].com.quit()
+        #    log.debug("Waiting for driver process to terminate")
+        #   driver[1].process.wait()
 
     def set_connection(self, connection):
         """Set the associated connection. Necessary for
