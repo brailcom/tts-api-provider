@@ -1,7 +1,7 @@
 #
 # server.py - Server side TTS API over text-protocol implementation
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -359,19 +359,27 @@ class TCPConnection(object):
         
     def _cmd_matches(self, command, template):
         """Compare command and template, return
-        True if they match, otherwise False""" 
-        
-        if len(command) != len(template):
-            return False
+        True if they match, otherwise False"""
         
         for i in range(0, len(command)):
-            if isinstance (template[i], tuple):                
-                # Check if the parameter is of correct type
-                continue
+            if isinstance (template[i], tuple):
+                if command[i] != 'nil':
+                    try:
+                        template[i][1](command[i])
+                    except:
+                        raise ErrorInvalidArgument                    
             elif command[i] == template[i]:
                 continue
             else:
                 return False
+
+        # TODO: This should be done better. When user specifies
+        # more arguments than allowed for a valid command, he
+        # will get back an InvalidCommand error.
+        if len(command) < len(template):
+            raise ErrorMissingArgument
+        elif len(command) > len(template):
+            return False
                        
         return True            
 
@@ -427,9 +435,13 @@ class TCPConnection(object):
 
         for pos in range(0, len(self.commands_map)):
             # print self.commands_map[pos]
-            template, action = self.commands_map[pos]
-            if self._cmd_matches(cmd, template):
-                break
+            try:
+                template, action = self.commands_map[pos]
+                if self._cmd_matches(cmd, template):
+                    break
+            except Error, error:
+                self._report_error(error)
+                return
         else:
             self._report_error(ErrorInvalidCommand())
             return
@@ -474,3 +486,36 @@ class TCPConnection(object):
             if (not isinstance(result, list)) and (not result == None):
                 result = [result]
             self.conn.send_reply(reply[0], reply[1], result)
+        
+    def send_audio_event(self, event):
+        """Send audio event on the connection.
+        WARNING: This is intended to be called asynchronously,
+        so the communication must be protected with mutexes."""
+
+        code, event_line = tcp_format_event(event)
+        self.conn.send_reply(code, event_line)
+
+def tcp_format_event(event):
+        """Format event line according to text protocol specifications"""
+        if event.type in ('message_start', 'message_end'):
+            event_line = event.type + " " + str(event.message_id) \
+                         +  " " + str(event.pos_text) + " " \
+                       + str(int(event.pos_audio))
+            code = 701
+        elif event.type in ('word_start', 'word_end', 'sentence_start',
+                            'sentence_end'):
+            event_line = event.type + " " + str(event.message_id) \
+                       + " " +str(event.n) + " " \
+                       + str(event.pos_text)  + " " \
+                       + str(int(event.pos_audio))
+            code = 702
+        elif event.type == 'index_mark':
+            event_line = event.type + " " + str(event.message_id) \
+                       + ' "' + event.name + '" ' \
+                       + str(event.pos_text)  + " " \
+                       + str(int(event.pos_audio))
+            code = 703
+        else:
+            raise NotImplementedError
+
+        return (code, event_line)
