@@ -8,7 +8,7 @@ cvs-st
 @c %**end of header
 
 @copying
-Copyright @copyright{} 2006 Brailcom, o.p.s.
+Copyright @copyright{} 2006, 2007 Brailcom, o.p.s.
 All rights reserved.
 
 @quotation
@@ -59,10 +59,11 @@ General Public License''
 @menu
 * Introduction::                
 * Design::                      
+* Server Implementation::       
 * TTS API Implementations::     
 @end menu
 
-@node Introduction
+@node Introduction, Design, Top, Top
 @chapter Introduction
 
 TTS API Provider is a system service providing applications with
@@ -103,7 +104,7 @@ development applications and applications who only retrieve the
 synthesized audio samples but do not play them on the sound card
 (e.g. a text2wav converter).  If in doubt, please contact us.
 
-@node Design
+@node Design, Server Implementation, Introduction, Top
 @chapter Design
 
 TTS API Provider is composed of four independent parts.  The
@@ -122,7 +123,7 @@ easy access to TTS API from various languages.
 * Convenience Libraries for Applications::  
 @end menu
 
-@node General Design
+@node General Design, TTS API Provider (core), Design, Design
 @section General Design
 
 The intended middle-term design, as also described in other sections
@@ -150,7 +151,7 @@ driver, but could be directed from the synthesizer itself directly to
 the destination, lowering the latency and transport overhead, as
 is illustrated on the picture in case of Festival.
 
-@node TTS API Provider (core)
+@node TTS API Provider (core), Drivers, General Design, Design
 @section TTS API Provider (core)
 
 @heading Functionality
@@ -230,7 +231,7 @@ for all synthesizers (maintaining the necessary heap of messages for
 synthesizers who do not support it). This will significantly release
 implementation burden on the applications.
 
-@node Drivers
+@node Drivers, Driver Template Library, TTS API Provider (core), Design
 @section Drivers
 
 @heading Functionality
@@ -260,7 +261,7 @@ Drivers will communicate in the same TCP version of TTS API through
 pipes, reading from their standard input and writing to their standard
 output.
 
-@node Driver Template Library
+@node Driver Template Library, Convenience Libraries for Applications, Drivers, Design
 @section Driver Template Library
 
 @heading Functionality:
@@ -280,7 +281,7 @@ synthesizer APIs easier
 @item @emph{Dependencies}: libc, ?
 @end itemize
 
-@node Convenience Libraries for Applications
+@node Convenience Libraries for Applications,  , Driver Template Library, Design
 @section Convenience Libraries for Applications
 
 @heading Functionality
@@ -298,7 +299,149 @@ care of	IPC communication
 @item @emph{Dependencies}: libc, Python
 @end itemize
 
-@node TTS API Implementations
+@node Server Implementation, TTS API Implementations, Design, Top
+@chapter Server Implementation
+
+This chapter roughly describes the implementation of TTS API provider,
+including the related subsystems (driver templates, audio subsystem
+etc.). This chapter should rather be seen more as an introduction
+guide for new developers than an exhaustive technical code
+documentation.  Please note that this description is not necessarily
+up to date. Ultimate documentation for the implementation are the
+abundant comments in the source code itself.
+
+@menu
+* TTS API Provider Core (implementation)::  
+* Audio Subsystem (implementation)::  
+* Python Device Driver Template (implementation)::  
+@end menu
+
+@node TTS API Provider Core (implementation), Audio Subsystem (implementation), Server Implementation, Server Implementation
+@section TTS API Provider core (implementation)
+
+TTS API Provider is a thread-based server. Handling of each client is
+done in a separate thread which in turn operates a separate set of
+output drivers. This is highly convenient as by a design decision,
+there are made no assumptions on interaction between the various
+clients.  In other words, the design must allow for multiple clients
+handling their synthesis requests and speaking at the same time. This
+allows higher level layers using TTS API to do a very sophisticated
+message coordination including serialized AND concurent speech, 3D
+aural speech from multiple sources etc.
+
+The main server with its daemon functionality (pidfile, signals,
+terminal detaching, global state of the server and global audio events
+receiver) is implemented in the source file @file{src/server.py}. The
+server is currently based on TCP communication and TCP communication
+should remain a part of the functionality. However, it is by no means
+restricted to TCP communication. @file{src/server.py} can be extended
+to include also other means of communication (DBUS, etc.) without
+loosing the Provider functionality provided by the underlaying
+modules. For such reason, care is taken to distinguish between the
+different modes of communication in paramters passed forward even
+though currently text-based TCP (or pipes) is the only option.
+
+@heading Connection handling
+
+When a new connection is obtained, a new thread is created running the
+@function{serve_client} function found in the same source
+file. @function{serve_client} starts a new @code{provider.Provider}
+object. The global logging, configuration, audio (subsystem) are
+passed to the Provider object on initialization.
+
+A second object of the family @code{ttsapi.server.} is then created to
+handle the connection. It is given the new @code{provider.Provider}
+object as its parameter. Its method @code{connection.process_input()}
+is then being called in a loop. This connection object will process
+the input from the communication channel and call the appropriate
+communication-mechanism independent method of the object
+@code{Provider}. @code{provider.Provider} is then responsible for
+providing the TTS API functionality, emulations and communication with
+the device drivers. It roughly implements the Python version of TTS API.
+
+@heading Audio Event Delivery Thread
+
+One thread is launched by the TTS API Provider right on its start.  It
+is the Audio Event Delivery Thread running as function
+@function{audio_event_delivery} implemented in @file{src/server.py}.
+This thread listens for all audio events delivered to TTS API Provider
+from the audio subsystem and dispatches them to the various
+@code{provider.Provider} objects associated with the appropriate
+connection to which this audio event belongs.
+
+Please note that it is important not to slide into the temptation of
+delivering audio events from the audio subsystem to the provider
+objects directly as it is a design decision to eventually split the
+audio subsystem and TTS API provider into different servers. (The
+idea is to use some global Free Software audio subsystem when one
+appears that fulfills the Accessibility Audio Framework Requirements
+and drop our own codebase). Once such a transition is achieved, events
+will necessarily be delivered into the server as a whole, not directly
+to the @code{provider.Provider} instances, so it will only be
+necessary to modify the @function{audio_event_delivery} method if this
+strict separation is maintained.
+
+For more information about the audio subsystem, please see @xref{Audio
+Subsystem (implementation)}.
+
+@heading Provider Object
+
+The @code{Provider} object is implemented in the file
+@{src/provider.py} and implements the core functionality of TTS API
+Provider in a client-server communication method independent way. On
+initialization, it starts its own set of device driver
+processes. Communication with the device drivers is currently led in
+the text-based pipe version of TTS API, the same code in
+@file{src/ttsapi/server.py} is used as for communication between
+clients and provider. Please refer to TTS API definition document,
+@xref{Python TTS API} and the source code itself for description of
+the available methods and their function.
+
+With regards to @textit{emulation} of missing capabilities in the
+drivers: Ideally, all emulation should be done in the provider object
+by cooperation with its subsystems whenever the driver reports that a
+capability is not available. Generally useful emulations like
+character caching, defer, text-substitution (punctuation, capital
+letters) and index marking emulation etc. should not be done in the
+drivers as this unnecessarily blows their codebase, reduces
+readability and necessarily leads to duplication of code. Emulations
+that do not emulate TTS API @textit{MUST HAVE} functionality must be
+configurable.
+
+The provider object recognizes three audio output methods:
+@itemize
+@item retrieval -- audio data will be retrieved to client application
+@item playback -- the synthesizer will play the audio data on speakers
+@item emulated_playback -- audio data will be passed to the TTS API Provider
+audio subsystem for playback
+@end itemize
+
+Methods @textit{retrieval} and @textit{emulated_playback} are only
+available if the device can return the synthesized data to the caller.
+For simple hardware synthesizers, only method playback is available.
+However, when both playback and retrieval are available by the device
+itself and the client requests playback, Provider will use
+'emulated_playback' so that we have full controll over the playback
+and we do not have to deal with the (usually numerous) bugs in
+synthesizers implementation of audio output (device blocking etc.)
+according to the TTS API Provider design decisions.
+
+If method @textit{emulated_playback} is being used, the @function{say_}
+functions need to notify the audio subsystem about the new message
+identification and tell it to expect new audio data in its audio data bin.
+Also request for playback must be sent whenever necessary. Please see the
+method @code{provider._prepare_for_message} in @file{src/provider.py}.
+
+@node Audio Subsystem (implementation), Python Device Driver Template (implementation), TTS API Provider Core (implementation), Server Implementation
+@section Audio Subsystem (implementation)
+
+
+
+@node Python Device Driver Template (implementation),  , Audio Subsystem (implementation), Server Implementation
+@section Python Device Driver Template (implementation)
+
+
+@node TTS API Implementations,  , Server Implementation, Top
 @chapter TTS API Implementations
 
 @menu
@@ -306,7 +449,7 @@ care of	IPC communication
 * Python TTS API::              
 @end menu
 
-@node Text Protocol TTS API
+@node Text Protocol TTS API, Python TTS API, TTS API Implementations, TTS API Implementations
 @section Text Protocol TTS API
 
 This section documents the text protocol in use for communication
@@ -333,7 +476,7 @@ specifications.
 * Other Commands (text protocol)::  
 @end menu
 
-@node General Rules (text protocol)
+@node General Rules (text protocol), Return Codes, Text Protocol TTS API, Text Protocol TTS API
 @subsection General Rules (text protocol)
 
 The text protocol version of TTS API is defined as a set
@@ -388,7 +531,7 @@ The last line determines the overall result of the command. The result
 code is followed by an English message describing the result of the
 action in a human readable form.
 
-@node Return Codes
+@node Return Codes, Driver Discovery (text protocol), General Rules (text protocol), Text Protocol TTS API
 @subsection Return Codes
 
 Each line of the output starts with a three-digit numeric code of
@@ -467,7 +610,7 @@ them.
 In the future, these return codes should be fixed so that clients can
 rely on them.
 
-@node Driver Discovery (text protocol)
+@node Driver Discovery (text protocol), Voice Discovery, Return Codes, Text Protocol TTS API
 @subsection Driver Discovery (text protocol)
 
 @table @code
@@ -548,7 +691,7 @@ DRIVER CAPABILITIES festival
 
 @end table
 
-@node Voice Discovery
+@node Voice Discovery, Speech Synthesis Commands (text protocol), Driver Discovery (text protocol), Text Protocol TTS API
 @subsection Voice Discovery
 
 @table @code
@@ -576,7 +719,7 @@ LIST VOICES festival
 @end example
 @end table
 
-@node Speech Synthesis Commands (text protocol)
+@node Speech Synthesis Commands (text protocol), Speech Control Commands (text protocol), Voice Discovery, Text Protocol TTS API
 @subsection Speech Synthesis Commands (text protocol)
 
 Commands listed in this section are actual request for synthesis (and
@@ -774,7 +917,7 @@ SAY ICON new-line
 
 @end table
 
-@node Speech Control Commands (text protocol)
+@node Speech Control Commands (text protocol), Parameter Settings (text protocol), Speech Synthesis Commands (text protocol), Text Protocol TTS API
 @subsection Speech Control Commands (text protocol)
 
 @table @code
@@ -825,7 +968,7 @@ DISCARD 47
 
 @end table
 
-@node Parameter Settings (text protocol)
+@node Parameter Settings (text protocol), Event Callbacks (text protocol), Speech Control Commands (text protocol), Text Protocol TTS API
 @subsection Parameter Settings (text protocol)
 
 All settings except for driver selection only have effect
@@ -845,7 +988,7 @@ Success return codes for all SET commands are
 * Audio Settings::              
 @end menu
 
-@node Driver Selection and Parameters (text protocol)
+@node Driver Selection and Parameters (text protocol), Voice Selection (text protocol), Parameter Settings (text protocol), Parameter Settings (text protocol)
 @subsubsection Driver Selection and Parameters (text protocol)
 
 @table @code
@@ -859,7 +1002,7 @@ SET DRIVER festival
 @end example
 @end table
 
-@node Voice Selection (text protocol)
+@node Voice Selection (text protocol), Prosody Parameters (text protocol), Driver Selection and Parameters (text protocol), Parameter Settings (text protocol)
 @subsubsection Voice Selection (text protocol)
 
 @table @code
@@ -901,7 +1044,7 @@ GET CURRENT VOICE
 
 @end table
 
-@node Prosody Parameters (text protocol)
+@node Prosody Parameters (text protocol), Style Parameters (text protocol), Voice Selection (text protocol), Parameter Settings (text protocol)
 @subsubsection Prosody Parameters (text protocol)
 
 @table @code
@@ -989,7 +1132,7 @@ where @var{volume} is a positive number.
 
 @end table
 
-@node Style Parameters (text protocol)
+@node Style Parameters (text protocol), Dictionaries, Prosody Parameters (text protocol), Parameter Settings (text protocol)
 @subsubsection Style Parameters (text protocol)
 
 @table @code
@@ -1036,10 +1179,10 @@ Set grouping of digits for reading numbers. The parameter
 
 @end table
 
-@node Dictionaries
+@node Dictionaries, Audio Settings, Style Parameters (text protocol), Parameter Settings (text protocol)
 @subsubsection Dictionaries
 
-@node Audio Settings
+@node Audio Settings,  , Dictionaries, Parameter Settings (text protocol)
 @subsubsection Audio Settings
 
 @table @code
@@ -1070,7 +1213,7 @@ SET AUDIO RETRIEVAL DESTINATION 127.0.0.1 1315
 
 @end table
 
-@node Event Callbacks (text protocol)
+@node Event Callbacks (text protocol), Other Commands (text protocol), Parameter Settings (text protocol), Text Protocol TTS API
 @subsection Event Callbacks (text protocol)
 
 Event are reported on the main connection asynchronously and only if
@@ -1112,7 +1255,7 @@ Information about each event is sent in this form:
 the exact meaning and format of the parameters is explained in TTS API
 specifications under section Audio Retrieval. 
 
-@node Other Commands (text protocol)
+@node Other Commands (text protocol),  , Event Callbacks (text protocol), Text Protocol TTS API
 @subsection Other Commands (text protocol)
 
 @table @code
@@ -1149,7 +1292,7 @@ HELP
 
 
 @page
-@node Python TTS API
+@node Python TTS API,  , Text Protocol TTS API, TTS API Implementations
 @section Python TTS API
 
 Python API is documented through docstrings and embedded comments.
