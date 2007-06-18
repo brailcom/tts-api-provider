@@ -17,9 +17,10 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: configuration.py,v 1.3 2007-06-16 18:01:45 hanke Exp $
+# $Id: configuration.py,v 1.4 2007-06-18 09:59:51 pdm Exp $
 
 import logging
+import os
 from optparse import OptionParser
 
 MyDebug = True
@@ -140,7 +141,7 @@ class Configuration(object):
                 'doc':None,
                 'type': object,
                 'default': [('festival',
-                    '/home/hanke/cvs/tts-api-provider/src/provider/festival.py')]
+                             os.path.join (os.path.dirname (__file__), 'festival.py'),)]
             },
         'default_driver':
             {

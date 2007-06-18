@@ -1,3 +1,8 @@
+2007-06-18  Milan Zamazal  <pdm@brailcom.org>
+
+	* src/provider/configuration.py (Configuration): Use the right
+	path instead of developer's private path in `available_drivers'.
+
 2007-06-16  Hynek Hanke  <hanke@homer.brailcom.xx>
 
 	* src/provider/provider.py: Callbacks and audio events implemented.
