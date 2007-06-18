@@ -18,11 +18,11 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.6 2007-06-16 20:28:58 hanke Exp $
+# $Id: connection.py,v 1.7 2007-06-18 09:59:59 pdm Exp $
 
 # --------------- Connection handling ------------------------
 
-import socket
+import socket as socket_
 import string
 import sys
 import os
@@ -264,12 +264,12 @@ class SocketConnection(Connection):
 
         self._lock = thread.allocate_lock()
         
-        if socket==None:
+        if socket is None:
             if self.logger:
                 self.logger.debug("Opening new socket")
-            self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self._socket.connect((socket.gethostbyname(host), port))
+            self._socket = socket_.socket(socket_.AF_INET, socket_.SOCK_STREAM)
+            self._socket.setsockopt(socket_.SOL_SOCKET, socket_.SO_REUSEADDR, 1)
+            self._socket.connect((socket_.gethostbyname(host), port))
         else:
             if self.logger:
                 self.logger.debug("Using existing socket")
@@ -334,7 +334,7 @@ class SocketConnection(Connection):
     
     def close (self):
         """Close the connection."""
-        socket.socket.shutdown(self._socket, os.O_RDWR)
+        socket_.socket.shutdown(self._socket, os.O_RDWR)
         if self.logger:
             self.logger.debug("Socket connection closed")
 
