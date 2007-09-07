@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.7 2007-06-18 09:59:59 pdm Exp $
+# $Id: connection.py,v 1.8 2007-09-07 18:20:56 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -26,7 +26,12 @@ import socket as socket_
 import string
 import sys
 import os
-import threading
+
+try:
+    import threading
+except:
+    import dummy_threading as threading
+
 import thread
 
 from errors import *
@@ -89,10 +94,85 @@ class Connection(object):
     END_OF_DATA_ESCAPED = NEWLINE + END_OF_DATA_ESCAPED_SINGLE + NEWLINE
     "Escaping for END_OF_DATA"    
 
-    def __init__ (self, logger=None):
+    def __init__ (self, logger=None, side='client'):
         self._data_transfer = False
         self._server_side_buf = ''
         self.logger = logger
+
+        assert side in ('client', 'server')
+        self._side = side
+
+        if side == 'client':
+            self._com_buffer = []
+            self._reply_semaphore = threading.Semaphore(0)
+            self._communication_thread = \
+                threading.Thread(target=self._communication, kwargs={},
+                                 name="Client communication thread")
+            self._communication_thread.start()
+
+    def _communication(self):
+        """Handle incomming socket communication.
+
+        Listens for all incomming communication on the socket, dispatches
+        events and puts all other replies into self._com_buffer list in the
+        already parsed form as (code, msg, data).  Each time a new item is
+        appended to the _com_buffer list, the corresponding semaphore
+        'self._reply_semaphore' is incremented.
+
+        This method is designed to run in a separate thread.  The thread can be
+        interrupted by closing the socket on which it is listening for
+        reading."""
+
+        while True:
+            try:
+                code, msg, data = self._recv_message()
+            except IOError:
+                # If the socket has been closed, exit the thread
+                sys.exit()
+            if code/100 != 7:
+                # This is not an index mark nor an event
+                self._com_buffer.append((code, msg, data))
+                self._reply_semaphore.release()
+                continue
+            # TODO: Hook callbacks here
+            #if self._callback is not None:
+            #    type = self._CALLBACK_TYPE_MAP[code]
+            #    if type == CallbackType.INDEX_MARK:
+            #        kwargs = {'index_mark': data[2]}
+            #    else:
+            #        kwargs = {}
+            #    # Get message and client ID of the event
+            #    msg_id, client_id = map(int, data[:2])
+            #    self._callback(msg_id, client_id, type, **kwargs)
+                                
+    def _recv_message(self):
+        """Read server response or a callback
+        and return the triplet (code, msg, data)."""
+        data = []
+        c = None
+        while True:
+            line = self._read_line()
+            assert len(line) >= 4, "Malformed data received from server:" + line
+            code, sep, text = line[:3], line[3], line[4:]
+            assert code.isalnum() and (c is None or code == c) and \
+                   sep in ('-', ' '), "Malformed data received from server:"  + line
+            if sep == ' ':
+                msg = text
+                return int(code), msg, tuple(data)
+            data.append(text)
+
+    def _recv_response(self):
+        """Read server response from the communication thread
+        and return the triplet (code, msg, data)."""
+        # TODO: This check is dumb but seems to work.  The main thread
+        # hangs without it, when the Speech Dispatcher connection is lost.
+        if not self._communication_thread.isAlive():
+            raise "Communication error"
+        self._reply_semaphore.acquire()
+        # The list is sorted, read the first item
+        response = self._com_buffer[0]
+        del self._com_buffer[0]
+        return response
 
     def _read_line(self):
         """Read one whole line from the communication channel.
@@ -121,24 +201,9 @@ class Connection(object):
         
         raise NotImplementedError
     
-    def _recv_response (self):
-        """Read server response and return the triplet (code, msg, data)
-        where data is a tuple of unparsed strings found on each line."""
-        data = []
-        c = None
-        while 1:
-            line = self._read_line()
-            assert len(line) >= 4, "Malformed data received from server!"
-            code, sep, text = line[:3], line[3], line[4:]
-            assert code.isalnum() and (c is None or code == c) and \
-                   sep in ('-', ' '), "Malformed data received from server!"
-            if sep == ' ':
-                msg = text
-                return int(code), msg, tuple(data)
-            data.append(text)
 
     def send_command (self, command, *args):
-        """Send SSIP command with given arguments and read server response.
+        """Send command with given arguments and read server response.
 
         Arguments can be of any data type -- they are all stringified before
         being sent to the server.
@@ -249,31 +314,34 @@ class Connection(object):
         
     def close (self):
         """Close the connection."""
-        pass
-
+        # Wait for the other thread to terminate
+        self._communication_thread.join()
+    
 class SocketConnection(Connection):
 
     _buffer = ''
     _data_transfer = False
 
-    def __init__(self, host="127.0.0.1", port=6570, socket=None, logger=None):
+    def __init__(self, host="127.0.0.1", port=6567, socket=None, logger=None,
+                 side='client'):
         """Init a connection to the server"""
-        
-        Connection.__init__(self, logger=logger)
+
         #self.logger = logger
 
         self._lock = thread.allocate_lock()
         
         if socket is None:
-            if self.logger:
-                self.logger.debug("Opening new socket")
+            if logger:
+                logger.debug("Opening new socket")
             self._socket = socket_.socket(socket_.AF_INET, socket_.SOCK_STREAM)
             self._socket.setsockopt(socket_.SOL_SOCKET, socket_.SO_REUSEADDR, 1)
             self._socket.connect((socket_.gethostbyname(host), port))
         else:
-            if self.logger:
-                self.logger.debug("Using existing socket")
+            if logger:
+                logger.debug("Using existing socket")
             self._socket = socket
+
+        Connection.__init__(self, logger=logger, side=side)
 
     def _read_line(self):
         """Read one whole line from the socket.
@@ -313,7 +381,7 @@ class SocketConnection(Connection):
             bytes_to_read -= len(data) 
         
         return result
-        
+
     def _write(self, data):
         """Write data to output.
 
@@ -337,21 +405,23 @@ class SocketConnection(Connection):
         socket_.socket.shutdown(self._socket, os.O_RDWR)
         if self.logger:
             self.logger.debug("Socket connection closed")
+        Connection.close(self)
 
 class PipeConnection(Connection):
     """Connection through pipes"""
     
     NEWLINE = "\r\n"
 
-    def __init__(self, pipe_in=sys.stdin, pipe_out=sys.stdout, logger=None):
+    def __init__(self, pipe_in=sys.stdin, pipe_out=sys.stdout, logger=None, side='client'):
         """Setup pipes for communication
 
         pipe_in -- pipe for incomming communication (replies)
         pipe_out -- pipe for outcomming communication (commands, data)
         """
-        Connection.__init__(self, logger=logger)
         self.pipe_in=pipe_in
         self.pipe_out=pipe_out
+
+        Connection.__init__(self, logger=logger, side=side)
 
     def _read_line(self):
         """Read one whole line from the socket.
@@ -378,4 +448,6 @@ class PipeConnection(Connection):
 
     def close (self):
         """Close the connection."""
-        pass
+        self.pipe_out.close()
+        self.pipe_in.close()
+        Connection.close(self)

@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.2 2007-06-16 18:01:34 hanke Exp $
+# $Id: audio.py,v 1.3 2007-09-07 18:20:55 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -349,7 +349,7 @@ def connection_handling():
             if sock.fileno() == server_socket.fileno():
                 (client_socket, address) = server_socket.accept()
                 log.info("Adding new audio client on socket " + str(client_socket.fileno()))
-                client_list.append(SocketConnection(socket=client_socket, logger=log))
+                client_list.append(SocketConnection(socket=client_socket, logger=log, side='server'))
             else:
                 try:
                     log.info("Receiving data from socket " + str(sock.fileno()))

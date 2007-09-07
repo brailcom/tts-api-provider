@@ -61,6 +61,12 @@ class FestivalConnection(object):
             driver.log.error("""Multi mode not supported in Festival, it seems you are
             using an old release of festival-freebsoft-utils""")
             sys.exit(1)
+
+        # festival-freebsoft-utils won't produce any output unless
+        # we set voice manually
+        self.command("speechd-set-voice", "male1")
+        self.command("speechd-set-language", "en")
+        
         
     def _send(self, data):
         # Send data to socket
@@ -487,7 +493,7 @@ class Controller(driver.Controller):
             encoding = 'S'+str(8*sample_n_bytes) + '_' + endian
 
             global retrieval_socket
-            driver.log.info("Sending audio data for playback")
+            driver.log.info("Sending " + str(len(audio_data_raw)) + " bytes of audio data for playback")
 
             event_list = []
             if block_number == 0:

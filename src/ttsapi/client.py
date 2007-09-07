@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.5 2007-06-16 20:28:06 hanke Exp $
+# $Id: client.py,v 1.6 2007-09-07 18:20:56 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -41,7 +41,7 @@ class TCPConnection(object):
     http://www.freebsoft.org/doc/tts-api/
     """
 
-    def __init__ (self, method, host='127.0.0.1', port='6570',
+    def __init__ (self, method='socket', host='127.0.0.1', port=6567,
                   pipe_in = sys.stdin, pipe_out = sys.stdout, logger=None):
         """Initialize the instance and connect to the server
 
@@ -526,3 +526,8 @@ class TCPConnection(object):
         """
         # TODO: Implement asynchronicity and callbacks
         raise NotImplementedError
+
+    def close(self):
+        """Close this connection"""
+        self._conn.close()
+        

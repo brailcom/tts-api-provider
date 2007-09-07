@@ -1,3 +1,15 @@
+2007-09-07  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/ttsapi/connection.py (Connection.__init__): Initialize new
+	communication thread.
+	(Connection._communication): New function.
+	(Connection._recv_message): New function.
+	(Connection._recv_response): Modified data from the
+	_communication() thread
+
+	* src/provider/festival.py (FestivalConnection.open):
+	festival-freebsoft-utils 0.7 needs explicit setting of voice
+
 2007-06-18  Milan Zamazal  <pdm@brailcom.org>
 
 	* src/ttsapi/connection.py (SocketConnection.__init__): Avoid
@@ -10,6 +22,27 @@
 
 2007-06-16  Hynek Hanke  <hanke@homer.brailcom.xx>
 
+	* src/ttsapi/server.py (TCPConnection._quit): Call provider.quit.
+
+	* src/ttsapi/connection.py (Connection.send_command_without_reply):
+	New method.	
+
+	* src/ttsapi/client.py (TCPConnection.quit): Do not wait for reply.
+
+	* src/provider/server.py (create_pid_file): rw->w for file creation
+	using open().
+
+	* src/provider/provider.py (Provider.quit): New method.
+
+	* src/provider/driver.py (Core.quit): New method.
+	(Controller.quit): New method.
+
+	* src/ttsapi/server.py (TCPConnection._cmd_matches): Bugfix for
+	len(command)>len(template).
+
+	
+2007-06-16  Hynek Hanke  <hanke@homer.brailcom.xx>
+	
 	* src/provider/provider.py: Callbacks and audio events implemented.
 
 	* src/ttsapi/server.py (TCPConnection.process_input): Audio events

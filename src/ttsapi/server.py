@@ -49,9 +49,9 @@ class TCPConnection(object):
         log = logger
         if method == 'socket':
             self.conn = connection.SocketConnection(socket=client_socket,
-                                                    logger=logger)
+                                                    logger=logger, side='server')
         elif method == 'pipe':
-            self.conn = connection.PipeConnection(logger=logger)
+            self.conn = connection.PipeConnection(logger=logger, side='server')
         else:
             raise "Unknown method of communication" + method
     
