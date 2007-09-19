@@ -1,3 +1,19 @@
+2007-09-19  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/ttsapi/server.py (TCPConnection.process_input): Handle communication
+	errors in connection.receive_line()
+
+	* src/ttsapi/connection.py (Connection._communication): Call parents
+	providers raise_event() when an event is received.
+	(Connection.close): Only join child thread if in client mode.
+
+	* src/ttsapi/client.py (TCPConnection): Call callbacks
+	on events.
+	(TCPConnection.register_callback): Changed. Rewritten.
+
+	* src/provider/provider.py (register_callback): Removed.
+	(_registered_callbacks): New variable.
+
 2007-09-07  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* src/ttsapi/connection.py (Connection.__init__): Initialize new
