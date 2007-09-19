@@ -402,7 +402,10 @@ class TCPConnection(object):
     def process_input(self):
         """Read one line of input and process it, calling the
         appropriate functions as defined in self."""
-        cmd = self.conn.receive_line()
+        try:
+            cmd = self.conn.receive_line()
+        except IOError:
+            self._quit()
         # Check if we didn't get only data
         if cmd == None:
             return None
@@ -493,7 +496,11 @@ class TCPConnection(object):
         so the communication must be protected with mutexes."""
 
         code, event_line = tcp_format_event(event)
-        self.conn.send_reply(code, event_line)
+        try:
+            self.conn.send_reply(code, "EVENT", [event_line,])
+        except:
+            raise ClientGone()
+
 
 def tcp_format_event(event):
         """Format event line according to text protocol specifications"""
@@ -502,8 +509,8 @@ def tcp_format_event(event):
                          +  " " + str(event.pos_text) + " " \
                        + str(int(event.pos_audio))
             code = 701
-        elif event.type in ('word_start', 'word_end', 'sentence_start',
-                            'sentence_end'):
+        elif event.type in ('word_start', 'word_end',
+                            'sentence_start', 'sentence_end'):
             event_line = event.type + " " + str(event.message_id) \
                        + " " +str(event.n) + " " \
                        + str(event.pos_text)  + " " \
