@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.6 2007-09-07 18:20:56 hanke Exp $
+# $Id: client.py,v 1.7 2007-09-19 12:57:05 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -37,9 +37,19 @@ class TCPConnection(object):
     For precise documentation of methods, method arguments
     and attributes please see the appropriate method,
     arguments and attributes in the TTS API specifications
-    available from
+d    available from
     http://www.freebsoft.org/doc/tts-api/
     """
+
+    _callbacks = {
+        'message_start' : [],
+        'message_end' : [],
+        'sentence_start' : [],
+        'sentence_end' : [],
+        'word_start' : [],
+        'word_end' : [],
+        'index_mark' : []
+        }
 
     def __init__ (self, method='socket', host='127.0.0.1', port=6567,
                   pipe_in = sys.stdin, pipe_out = sys.stdout, logger=None):
@@ -55,9 +65,9 @@ class TCPConnection(object):
         assert method in ['socket', 'pipe']
         self.logger = logger
         if method == 'socket':
-            self._conn = connection.SocketConnection(host, port, logger=logger)
+            self._conn = connection.SocketConnection(host, port, logger=logger, provider=self)
         elif method == 'pipe':
-            self._conn = connection.PipeConnection(pipe_in, pipe_out, logger=logger)
+            self._conn = connection.PipeConnection(pipe_in, pipe_out, logger=logger, provider=self)
             
     # Driver discovery
 
@@ -495,14 +505,21 @@ class TCPConnection(object):
 
     # Callbacks
     
-    def register_callback(self, callback):
+    def register_callback(self, event_type, callback):
         """Register a function to be called whenever
         an event is received from server (message begin/end,
         word start/end etc). This function will be called asynchronously
         from a separate thread without any additional synchronization
-        mechanisms.
+        mechanisms. If more functions are specified for a given
+        callback type, they will be called one by one, but the execution
+        order is not specified.
 
         Arguments:
+        event_type -- one of 
+           'all' : apply for all events
+           event : where event is an event identifier defined by TTS API
+                   (e.g. 'message_start')
+           [event1, event2,...] : list of events
         callback -- a function to call when an event
         is received.
 
@@ -524,8 +541,44 @@ class TCPConnection(object):
         the name of the index mark as a string otherwise it contains
         the value None          
         """
-        # TODO: Implement asynchronicity and callbacks
-        raise NotImplementedError
+
+
+        if event_type == 'all':
+            types = self._callbacks.keys()
+        if isinstance(event_type, str):
+            types = [event_type, ]
+        elif isinstance(event_type, list) or isinstance(event_type, tuple):
+            types = event_type
+        else:
+            assert 0, "Unknown callback type"
+
+        for type in types:
+                self._callbacks[type].append(callback)
+
+
+    def raise_event(self, code, msg, data):
+        """Call the appropriate provider function for the given event"""
+
+        event = AudioEvent()
+
+        line = data[0].split()
+
+        event.type = line[0]
+        event.message_id = line[1]
+        if event.type in ['message_start', 'message_end']:
+            event.pos_text, event.pos_audio = map(float, line[2:])
+        elif event.type in ['sentence_start', 'sentence_end', 'word_start', 'word_end']:
+            event.n, event.pos_text, event.pos_audio = map(float, line[1:])
+        elif type == 'index_mark':
+            name = line[1].strip('"')
+            event.pos_text, event.pos_audio = map(fload, line[2:])
+        else:
+            raise "Unknown index mark"
+
+        # Call all registered callbacks in random order
+        if event.type in self._callbacks:
+            for callback in self._callbacks[event.type]:
+                callback(event)
 
     def close(self):
         """Close this connection"""
