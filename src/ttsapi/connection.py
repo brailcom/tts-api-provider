@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.8 2007-09-07 18:20:56 hanke Exp $
+# $Id: connection.py,v 1.9 2007-09-19 12:57:11 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -94,10 +94,12 @@ class Connection(object):
     END_OF_DATA_ESCAPED = NEWLINE + END_OF_DATA_ESCAPED_SINGLE + NEWLINE
     "Escaping for END_OF_DATA"    
 
-    def __init__ (self, logger=None, side='client'):
+
+    def __init__ (self, logger=None, side='client', provider=None):
         self._data_transfer = False
         self._server_side_buf = ''
         self.logger = logger
+        self.provider = provider
 
         assert side in ('client', 'server')
         self._side = side
@@ -134,17 +136,13 @@ class Connection(object):
                 self._com_buffer.append((code, msg, data))
                 self._reply_semaphore.release()
                 continue
-            # TODO: Hook callbacks here
-            #if self._callback is not None:
-            #    type = self._CALLBACK_TYPE_MAP[code]
-            #    if type == CallbackType.INDEX_MARK:
-            #        kwargs = {'index_mark': data[2]}
-            #    else:
-            #        kwargs = {}
-            #    # Get message and client ID of the event
-            #    msg_id, client_id = map(int, data[:2])
-            #    self._callback(msg_id, client_id, type, **kwargs)
-                                
+            else: # code of type 7**
+                # This is an event
+                if self.provider:
+                    self.provider.raise_event(code, msg, data)
+                else:
+                    raise "Can't raise event, no provider specified"
+
     def _recv_message(self):
         """Read server response or a callback
         and return the triplet (code, msg, data)."""
@@ -304,26 +302,28 @@ class Connection(object):
 
         if (len(data) == 1) and (data[0] == '.'):
             data = self.END_OF_DATA_ESCAPED_SINGLE
-        
+
         data = string.replace(data, self.END_OF_DATA, self.END_OF_DATA_ESCAPED)
         self._write(data + self.END_OF_DATA)
         code, msg, rep_data = self._recv_response()
         if code/100 != 2:
             raise TTSAPIError(code, msg, data)
         return code, msg, rep_data
-        
+
     def close (self):
         """Close the connection."""
         # Wait for the other thread to terminate
-        self._communication_thread.join()
-    
+        
+        if self._side == 'client':
+            self._communication_thread.join()
+
 class SocketConnection(Connection):
 
     _buffer = ''
     _data_transfer = False
 
     def __init__(self, host="127.0.0.1", port=6567, socket=None, logger=None,
-                 side='client'):
+                 side='client', provider=None):
         """Init a connection to the server"""
 
         #self.logger = logger
@@ -341,7 +341,7 @@ class SocketConnection(Connection):
                 logger.debug("Using existing socket")
             self._socket = socket
 
-        Connection.__init__(self, logger=logger, side=side)
+        Connection.__init__(self, logger=logger, side=side, provider=provider)
 
     def _read_line(self):
         """Read one whole line from the socket.
@@ -412,7 +412,8 @@ class PipeConnection(Connection):
     
     NEWLINE = "\r\n"
 
-    def __init__(self, pipe_in=sys.stdin, pipe_out=sys.stdout, logger=None, side='client'):
+    def __init__(self, pipe_in=sys.stdin, pipe_out=sys.stdout, logger=None, side='client',
+                 provider=None):
         """Setup pipes for communication
 
         pipe_in -- pipe for incomming communication (replies)
@@ -421,7 +422,7 @@ class PipeConnection(Connection):
         self.pipe_in=pipe_in
         self.pipe_out=pipe_out
 
-        Connection.__init__(self, logger=logger, side=side)
+        Connection.__init__(self, logger=logger, side=side, provider=provider)
 
     def _read_line(self):
         """Read one whole line from the socket.
@@ -438,7 +439,6 @@ class PipeConnection(Connection):
         
     def _write(self, data):
         """Write data to output.
-
         data -- contains the data to be written including the
         necessary newlines and carriage return characters."""
         self.pipe_out.write(data)
@@ -451,3 +451,4 @@ class PipeConnection(Connection):
         self.pipe_out.close()
         self.pipe_in.close()
         Connection.close(self)
+
