@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.6 2007-06-16 20:26:59 hanke Exp $
+# $Id: provider.py,v 1.7 2007-09-19 12:56:57 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -56,6 +56,7 @@ class Provider(object):
     """
 
     _connection = None
+    _registered_callbacks = {}
 
     def __init__ (self, logger, configuration, audio,
                   global_state):
@@ -76,7 +77,9 @@ class Provider(object):
             log.debug("Subprocess for driver" + name + "initalized")
             self.loaded_drivers[name] = Driver(process=process, name=name,
                 com = ttsapi.client.TCPConnection(method = 'pipe',
-                    pipe_in = process.stdout, pipe_out = process.stdin, logger=log))
+                                                  pipe_in = process.stdout,
+                                                  pipe_out = process.stdin,
+                                                  logger=log))
             log.debug("Driver instance for driver" + name + "created")
             self.loaded_drivers[name].com.init()
             log.debug("Driver instance for driver" + name + "initalized")
@@ -511,39 +514,10 @@ class Provider(object):
         """Method to be called whenever an audio
         event is available. Takes care of dispatching
         the audio event through the associated connection."""
-        self._connection.send_audio_event(event)
+        try:
+            self._connection.send_audio_event(event)
+        except ttsapi.server.ClientGone:
+            pass
         
-    def register_callback(self, callback):
-        """DEPRECATED: This is useful in TTS API implementation
-        for applications, but here internally, dispatch_audio_event
-        method is used.
+        
 
-        Register a function to be called whenever
-        an event is received from server (message begin/end,
-        word start/end etc). This function will be called asynchronously
-        from a separate thread without any additional synchronization
-        mechanisms.
-
-        Arguments:
-        callback -- a function to call when an event
-        is received.
-
-        The callback function must have this form
-          
-        callback(event_type, n, text_position, name)
-
-        where meaning of the arguments is the following:
-        event_type -- one of 'message_begin', 'message_end',
-        'sentence_begin', 'sentence_end', 'word_begin', 'word_end',
-        'index_mark'
-        n -- a positive number specifying order of the event of the
-        given type (1 for first event of this type in the message,
-        2 for second etc)
-        text_position -- a positive number representing the position
-        in the original text where the event occured in number of
-        characters (UTF-32) from the beginning of the message
-        name -- for events of type 'index_mark' this variable contains
-        the name of the index mark as a string otherwise it contains
-        the value None          
-        """
-        raise ErrorNotImplemented
