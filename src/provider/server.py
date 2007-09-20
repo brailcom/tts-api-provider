@@ -19,12 +19,13 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: server.py,v 1.6 2007-06-16 20:27:36 hanke Exp $
+# $Id: server.py,v 1.7 2007-09-20 09:06:56 hanke Exp $
 
 import sys
 import socket
 import threading
 import thread
+import traceback
 import fcntl
 import os
 from copy import copy
@@ -68,7 +69,7 @@ class GlobalState(object):
     def message_provider(self, id):
         self._lock.acquire()
         id =  self._messages[id]
-        self._lock_release()        
+        self._lock.release()        
         return id
 
     def new_message_id(self, provider):
@@ -116,11 +117,20 @@ def audio_event_delivery(global_state):
     """Listens for events reported from audio server and send them
     to the appropriate clients"""
 
+
     log.info("Waiting for events in main")
     while True:
-        event = audio.audio_events.pop()
-        provider = global_state._messages[event.message_id]
-        provider.dispatch_audio_event(event)
+        try:
+            log.info("WAITING NEXT EVENT")
+            event = audio.audio_events.pop()
+            log.info("EVENT RECEIVED")
+            provider = global_state.message_provider(event.message_id)
+            log.info("DISPATCHING EVENT")
+            provider.dispatch_audio_event(event)
+            log.info("EVENT DISPATCHED")
+        except:
+            print "EXCEPTION IN LATERAL THREAD, SEE LOGS\n"
+            log.info("Exception in lateral thread: " + traceback.format_exc())
 
 def create_pid_file():
 

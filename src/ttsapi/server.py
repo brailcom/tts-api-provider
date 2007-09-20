@@ -24,6 +24,8 @@ import connection
 from structures import *
 from errors import *
 
+import traceback
+
 class ClientGone(Exception):
     """Raised when connection with client is terminated"""
 
@@ -469,7 +471,12 @@ class TCPConnection(object):
         else:
             try:
                 if action.has_key('arg_data'):
-                    result = function(text=data, **arg_dict)
+                    try:
+                        result = function(text=data, **arg_dict)
+                    except Exception, e:
+                        self.logger.info("ERROR: Can't execute function, following is the reason: "
+                                         + traceback.format_exc())
+                        raise UnknownError()
                 else:
                     self.logger.debug("Starting function")
                     result = function(**arg_dict)
