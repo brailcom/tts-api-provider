@@ -1,3 +1,12 @@
+2007-09-20  Jan Buchal  <hanke@syrr.buchal.name>
+
+	* src/ttsapi/client.py (TCPConnection.register_callback): Typo fixed if -> elif.
+
+	* src/ttsapi/connection.py (SocketConnection._write): Release lock even if connection crashes.
+
+	* src/ttsapi/server.py (TCPConnection.process_input): Raise error if an exception happens during
+	function call. Log traceback.
+
 2007-09-19  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* src/ttsapi/server.py (TCPConnection.process_input): Handle communication
