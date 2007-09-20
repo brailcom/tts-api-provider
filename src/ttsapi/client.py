@@ -18,11 +18,12 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.7 2007-09-19 12:57:05 hanke Exp $
+# $Id: client.py,v 1.8 2007-09-20 09:06:01 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
 import sys
+import traceback
 
 import connection
 from structures import *
@@ -545,7 +546,7 @@ d    available from
 
         if event_type == 'all':
             types = self._callbacks.keys()
-        if isinstance(event_type, str):
+        elif isinstance(event_type, str):
             types = [event_type, ]
         elif isinstance(event_type, list) or isinstance(event_type, tuple):
             types = event_type
@@ -578,8 +579,10 @@ d    available from
         # Call all registered callbacks in random order
         if event.type in self._callbacks:
             for callback in self._callbacks[event.type]:
-                callback(event)
-
+                try:
+                    callback(event)
+                except Exception, e:
+                    traceback.print_exc()
     def close(self):
         """Close this connection"""
         self._conn.close()
