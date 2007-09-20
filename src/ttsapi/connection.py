@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.9 2007-09-19 12:57:11 hanke Exp $
+# $Id: connection.py,v 1.10 2007-09-20 09:06:26 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -323,7 +323,7 @@ class SocketConnection(Connection):
     _data_transfer = False
 
     def __init__(self, host="127.0.0.1", port=6567, socket=None, logger=None,
-                 side='client', provider=None):
+                 provider=None, side='client'):
         """Init a connection to the server"""
 
         #self.logger = logger
@@ -387,15 +387,17 @@ class SocketConnection(Connection):
 
         data -- contains the data to be written including the
         necessary newlines and carriage return characters."""
-
-        self._lock.acquire()
-        self._socket.send(data)
-        # WARNING: Seems not to bee needed, but may be cause
-        # of problems too. I don't know.
-        #self._socket.flush()
-        if self.logger: 
-            self.logger.debug("Sent over socket: %s",  data)
-        self._lock.release()
+ 
+        try:
+            self._lock.acquire()
+            self._socket.send(data)
+            # WARNING: Seems not to bee needed, but may be cause
+            # of problems too. I don't know.
+            #self._socket.flush()
+            if self.logger: 
+                self.logger.debug("Sent over socket: %s",  data)
+        finally:
+            self._lock.release()
         
     def fileno(self):
         return self._socket.fileno()
