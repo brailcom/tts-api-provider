@@ -4,6 +4,7 @@ import sys
 import select
 import socket
 import time
+import thread
 
 import driver
 
@@ -44,6 +45,9 @@ class FestivalConnection(object):
     def open(self,host="localhost", port=1314):
         """Open new connection to festival according to configuration"""
         # TODO: Handle festival crashes
+        
+        self._lock = thread.allocate_lock()
+
         self._festival_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._festival_socket.connect((socket.gethostbyname(host), port))
         self._festival_socket.setblocking(0) # non-blocking
@@ -72,18 +76,42 @@ class FestivalConnection(object):
         # Send data to socket
         driver.log.debug("Sending to Festival:" + data)
         self._festival_socket.send(data)
+        driver.log.debug("Data sent to Festival")
         
     def _read_to_buffer(self):
         """If there are any data on the socket, read them
         to the buffer. Otherwise wait until there is something
         and read it.'"""
-        
+
+        driver.log.debug("Reading to buffer from Festival")
         fd_tuple = [self._festival_socket,]
-        select.select(fd_tuple, [],  fd_tuple) # wait for output ready and exceptions
-        self._com_buffer += self._festival_socket.recv(conf.data_block)
-        while select.select(fd_tuple, [], fd_tuple, 0)  != ([],[],[]): # non-blocking now
-            self._com_buffer += self._festival_socket.recv(conf.data_block)
-    
+        sel = select.select(fd_tuple, [],  fd_tuple) # wait for output ready and exceptions
+        new_data = self._festival_socket.recv(conf.data_block)
+        if len(new_data) == 0:
+            driver.log.debug("Raising IO Error 1")
+            driver.log.debug("Select returned:" + str(sel))
+            driver.log.debug("Data read: |" + new_data + "|")
+            # Very mysterious, but this sometimes happens...
+            raise IOError
+        self._com_buffer += new_data
+
+        driver.log.debug("Now we are sure there is something to read ("+str(self._festival_socket)+")")
+        while True:
+            sel = select.select(fd_tuple, [], fd_tuple, 0) # non-blocking now
+            if sel == ([], [], []):
+                return
+            driver.log.debug("Reading something from Festival socket in a loop " + str(sel))
+            new_data = self._festival_socket.recv(conf.data_block)
+            if len(new_data) == 0:
+                # I don't know why, but sometimes select returns activity
+                # on the socket when in fact there is nothing, and we
+                # end up in an infinite loop
+                driver.log.debug("Raising IO Error 2")
+                driver.log.debug("Select returned:" + str(sel))
+                driver.log.debug("Data read: |" + new_data + "|")
+                raise IOError
+            self._com_buffer += new_data    
+
     def _read_identifier(self):
         """Read a Festival communication identifier: LP, OK or ER
         from the buffer"""
@@ -92,7 +120,10 @@ class FestivalConnection(object):
             self._read_to_buffer()
         identifier = self._com_buffer[:3]
         self._com_buffer = self._com_buffer[3:]
-        
+
+        driver.log.debug("Received identifier "+identifier)
+        driver.log.debug("Whole buffer |"+self._com_buffer+"|")
+
         if (identifier == 'ER\n'):
             raise FestivalReplyError;
             return 'ER'
@@ -114,7 +145,9 @@ class FestivalConnection(object):
         raises te FestivalReplyError exception.""" 
         id, audio_data, reply_data = None, None, None
         
+        driver.log.debug("Receiving reply from Festival")
         self._read_to_buffer()
+        driver.log.debug("Reply read from Festival")
         id = self._read_identifier() # Read LP, OK, or ER
         if (id == 'OK') or (id == 'ER'):
             driver.log.debug("Received from Festival:" + id)
@@ -202,10 +235,14 @@ class FestivalConnection(object):
             else:
                 cmd += " " + str(a)
         cmd += ")\n"
-            
-        self._send(cmd)
-        return self.receive_reply()
         
+        self._lock.acquire()
+        self._send(cmd)
+        reply = self.receive_reply()
+        self._lock.release()
+        
+        return reply
+
 class Core(driver.Core):
 
     def __init__(self):
