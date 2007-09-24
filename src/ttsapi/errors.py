@@ -90,11 +90,12 @@ class _CommunicationError(Exception):
     
 class TTSAPIError (_CommunicationError):
     """Error in TTS API request"""
-    def __init__(self, error, code = None, msg = None, data = None):
-        self.error_description = error
+    def __init__(self, code = None, msg = None, data = None, error_description = None):
+        self.error_description = error_description
         self.code = code
         self.msg = msg
         self.data = data
     
     def __str__(self):
-        return "Error  with description: " + str(self.error_description)
+        a = "Error  " + str(self.code) 
+        return a
