@@ -34,7 +34,10 @@ class TCPConnection(object):
 
     def _quit(self):
         self.provider.quit()
-        self.conn.close()
+        try:
+            self.conn.close()
+        except IOError:
+            pass
         raise ClientGone()
 
     def __init__(self, provider, logger, method='socket', client_socket=None):
@@ -406,7 +409,10 @@ class TCPConnection(object):
                     err_reply = "UNKNOWN ERROR"
                     err_detail = None
 
-        self.conn.send_reply(err_code, err_reply, err_detail)
+        try:
+            self.conn.send_reply(err_code, err_reply, err_detail)
+        except IOError:
+            self._quit()
             
     def process_input(self):
         """Read one line of input and process it, calling the
@@ -516,8 +522,7 @@ class TCPConnection(object):
         try:
             self.conn.send_reply(code, "EVENT", [event_line,])
         except:
-            raise ClientGone()
-
+            self._quit()
 
 def tcp_format_event(event):
         """Format event line according to text protocol specifications"""
