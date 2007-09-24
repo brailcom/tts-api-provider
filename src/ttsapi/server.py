@@ -386,18 +386,25 @@ class TCPConnection(object):
         return True            
 
     def _report_error(self, error):
-        """Report error on the connection according to
-        self.errors_map"""
-        for entry in self.errors_map:
-            if isinstance(error, entry[0]):
-                err_code = entry[1][0]
-                err_reply = entry[1][1]
-                err_detail = error.detail()
-                break
+        """Report error on the connection according to self._errors_map.
+
+        Arguments:
+        error -- a numerical code of the error or an exception class"""
+        if error in self.errors_map:
+            entry = self.errors_map[error]
+            err_code = entry[0]
+            err_reply = entry[1]
         else:
-            err_code = 300
-            err_reply = "UNKNOWN ERROR"
-            err_detail = None
+            for entry in self.errors_map:
+                if isinstance(error, entry[0]):
+                    err_code = entry[1][0]
+                    err_reply = entry[1][1]
+                    err_detail = error.detail()
+                    break
+                else:
+                    err_code = 300
+                    err_reply = "UNKNOWN ERROR"
+                    err_detail = None
 
         self.conn.send_reply(err_code, err_reply, err_detail)
             
@@ -471,19 +478,22 @@ class TCPConnection(object):
         else:
             try:
                 if action.has_key('arg_data'):
-                    try:
-                        result = function(text=data, **arg_dict)
-                    except Exception, e:
-                        self.logger.info("ERROR: Can't execute function, following is the reason: "
-                                         + traceback.format_exc())
-                        raise UnknownError()
+                    result = function(text=data, **arg_dict)
                 else:
-                    self.logger.debug("Starting function")
                     result = function(**arg_dict)
+            #TODO: Unify this
             except Error, err:
                 self._report_error(err);
-                return;
-    
+                return
+            except TTSAPIError, err:
+                self._report_error(err.code);
+                return
+            except Exception, e:
+                self.logger.info("ERROR: Can't execute function, following is the reason: "
+                                 + traceback.format_exc())
+                self._report_error(UnknownError)
+                return
+
         if action.has_key('function_post_hook'):
             action['function_post_hook']()  
             
