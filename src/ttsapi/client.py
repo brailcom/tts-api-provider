@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.8 2007-09-20 09:06:01 hanke Exp $
+# $Id: client.py,v 1.9 2007-09-24 07:35:21 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -64,7 +64,11 @@ d    available from
           
         """
         assert method in ['socket', 'pipe']
-        self.logger = logger
+        if logger:
+            self.logger = logger
+        else:
+            self.logger = logging.Logger('TTS API Information')
+
         if method == 'socket':
             self._conn = connection.SocketConnection(host, port, logger=logger, provider=self)
         elif method == 'pipe':
@@ -73,11 +77,13 @@ d    available from
     # Driver discovery
 
     def init(self):
-        """Initialize"""
+        """Initialize connection"""
+        self.logger.info("Initializing connection")
         self._conn.send_command("INIT")
 
     def quit(self):
         """Quit"""
+        self.logger.info("Terminating connection")
         self._conn.send_command_without_reply("QUIT")
     
     def drivers (self):
@@ -526,23 +532,12 @@ d    available from
 
         The callback function must have this form
           
-        callback(event_type, n, text_position, name)
+        callback(event)
 
-        where meaning of the arguments is the following:
-        event_type -- one of 'message_begin', 'message_end',
-        'sentence_begin', 'sentence_end', 'word_begin', 'word_end',
-        'index_mark'
-        n -- a positive number specifying order of the event of the
-        given type (1 for first event of this type in the message,
-        2 for second etc)
-        text_position -- a positive number representing the position
-        in the original text where the event occured in number of
-        characters (UTF-32) from the beginning of the message
-        name -- for events of type 'index_mark' this variable contains
-        the name of the index mark as a string otherwise it contains
-        the value None          
+        the parameter event is an instance of ttaspi.structures.AudioEvent.
+        It includes type of the event, number of the event, positions
+        in both text and audio and name of the index mark.
         """
-
 
         if event_type == 'all':
             types = self._callbacks.keys()
