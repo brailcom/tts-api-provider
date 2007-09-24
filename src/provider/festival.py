@@ -496,17 +496,19 @@ class Controller(driver.Controller):
         block_number = 0
         total_samples = 0
         code, reply_data, audio_data = festival.command('speechd-next')
+
         driver.log.info("speechd-next returned code: " + code)
         driver.log.info("speechd-next returned data: " + reply_data)
         while True:
             #driver.log.info("speechd-next returned audio data: " + audio_data)
-    
-            if audio_data == None:
-                driver.log.info("No audio data, skipping")
+
+            if (audio_data == None) or (len(audio_data) == 1024):
+                driver.log.info("No audio data for this message, skipping")
                 return
-    
+
             if audio_data[:4] != "NIST":
                 driver.log.error("NIST header missing in audio block from festival, skipping")
+                # TODO: Maybe return?
                 continue
         
             audio_NIST_header = audio_data[:1024]
@@ -536,14 +538,14 @@ class Controller(driver.Controller):
             if block_number == 0:
                 event_list.append(AudioEvent(type='message_start', pos_text=0,
                                              pos_audio=0))
-
+                                             
             code, reply_data, audio_data = festival.command('speechd-next')
-            
-            if audio_data == None:
-                # End of data
+            if (audio_data == None) or (len(audio_data) == 1024):
+                driver.log.info("No more data, appending message_end to event list")
                 event_list.append(AudioEvent(type='message_end', pos_text = 0,
                                              pos_audio = float(total_samples)/sample_rate*1000))
-                                 
+
+            # Sending datablock to retrieval socket
             retrieval_socket.send_data_block(
                 msg_id = message_id, block_number = block_number,
                 data_format = "raw",
@@ -554,6 +556,7 @@ class Controller(driver.Controller):
                 encoding = encoding,
                 event_list = event_list)
             block_number += 1
+
             
     def say_text (self, text, format='ssml',
                  position = None, position_type = None,
@@ -635,9 +638,9 @@ class Controller(driver.Controller):
         if message_id == None:
             raise """Invalid message_id None"""        
         try:
-            festival.command("speechd-icon", (icon, 's'))
+            festival.command("speechd-sound-icon", (icon, 's'))
         except:
-            driver.log.error("speechd-icon unsuccessful with: |" + icon + "|")
+            driver.log.error("speechd-sound-icon unsuccessful with: |" + icon + "|")
 
         # Retrieve data and listen for stop events
         try:
