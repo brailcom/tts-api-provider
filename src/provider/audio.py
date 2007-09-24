@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.4 2007-09-24 07:33:05 hanke Exp $
+# $Id: audio.py,v 1.5 2007-09-24 14:41:10 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -42,6 +42,9 @@ import ttsapi
 from ttsapi.connection import *
 from ttsapi.structures import AudioEvent
 from configuration import Configuration
+
+class MessageNotInPlayback(Exception):
+    pass
 
 class PlaybackInfo(object):
     """Information about playback of a track"""
@@ -121,18 +124,17 @@ class Audio(object):
         and discard it (seee Audio.discard())"""
 
         if not messages_in_playback.has_key(message_id):
-            raise "Message not in playback"
+            raise MessageNotInPlayback
 
         # Stop playback
         source = self.sources[message_id]
         source.stop()
-
+        
         # Remove playback info
         del messages_in_playback[message_id]
 
         # Discard this track
         self.discard(message_id)
-
     
     def discard(self, message_id):
         """Discard track assigned to message_id"""
@@ -143,8 +145,10 @@ class Audio(object):
     
         # Remove playback info, not awaiting data any more, remove source,
         # clean-up
-        self.awaiting_message_data.remove(message_id)
-        del self.sources[message_id]
+        if message_id in self.awaiting_message_data:
+            self.awaiting_message_data.remove(message_id)
+        if message_id in self.sources:
+            del self.sources[message_id]
     
     def add_data(self, message_id, data, format, sample_rate,
                  channels, encoding):
@@ -154,7 +158,9 @@ class Audio(object):
         
         log.debug("Adding data with length " + str(len(data)))
         if message_id not in self.awaiting_message_data:
-            raise "Unknown data"
+            log.debug("Data for " + str(message_id) + " rejected. " \
+                          "Message not in awaiting_message_data list")
+            return
 
         if channels == 1:
             format = pyopenal.AL_FORMAT_MONO16
@@ -336,6 +342,7 @@ def connection_handling():
 
     client_list = [server_socket,]
     while True:
+        log.debug("Waiting for activity")
         ready_to_read, ready_to_write, in_error = select.select(client_list, (), client_list)
         log.info("Socket activity: " + str(ready_to_read) + " " + str(ready_to_write) + " " \
                  + str(in_error))
@@ -364,6 +371,7 @@ def playback():
     """Listen for events and play tracks in a separate thread."""
 
     while True:
+        log.debug("Waiting for controll request")
         ev = audio_ctrl_request.pop()
         log.debug("Received event " + ev.type +" "+ str(ev.message_id))
         
@@ -424,7 +432,6 @@ def events():
                     log.debug("For event " + event.type + " ms =" + str(ms))
                     if ms < 0:
                         audio_events.push(event)
-                        log.info("EVENT HERE")
                         event.dispatched=True
                     elif ms < min:
                         min = ms
@@ -437,9 +444,11 @@ def events():
             # On each addition, the value of min must be
             # recalculated.
             # log.debug("Sleeping " + str(min/1000.0) + " ms")
+            log.debug("Sleeping " + str(min) +" ms")
             time.sleep(min/1000.0)
         else:
             # log.debug("Sleeping 10ms")
+            log.debug("Sleeping 10ms")
             time.sleep(0.01)
 
             #TODO: Calculate callback timing errors, check the performance
