@@ -1,4 +1,44 @@
+2007-09-24  Hynek Hanke  <hanke@homer.brailcom.xx>
+
+	* src/ttsapi/connection.py (SocketConnection._write): Raise IOError
+	if socket.send() is not succesfull.
+	(SocketConnection.close): Raise IOError
+	if socket.shutdown() is not succesfull.
+
+	* src/ttsapi/client.py: Import logging.
+
+	* src/provider/festival.py (Controller.retrieve_data.read_item): Added
+	condition to terminate data reading when audio_data is not None,
+	but empty (only NIST header, no data).
+
+	* src/provider/audio.py (MessageNotInPlayback): New exception.
+
+
+	* src/provider/festival.py (Controller.retrieve_data.read_item)
+	(Controller.retrieve_data.read_item): Terminate if audio_data is
+	None or if lenght of audio data is 0.
+	(Controller.retrieve_data.read_item): Missing return added.
+
+	* src/ttsapi/server.py (TCPConnection.send_audio_event): Call
+	self._quit() instead of raising ClientGone
+	(TCPConnection._report_error): Call self._quit() on IOError.
+
+	* src/provider/provider.py (Provider.cancel): Call 'discard' instead of 'stop'.
+	This is necessary so that we prevent messages from being said even when
+	audio output was not started yet.
+
+	* src/provider/audio.py (Audio.stop): Do not raise an exception if
+	attempting to stop a message not in playback
+	(Audio.stop): String exception "Message not in playback" converted
+	to MessageNotInPlayback(Exception)
+
+	* src/provider/festival.py (Controller.say_icon): Festival command
+	speechd-icon changed to speechd-sound-icon.
+
 2007-09-24  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/provider/provider.py (Provider): Modified asserts so that
+	unicode text input is accepted.
 
 	* src/ttsapi/client.py (TCPConnection): Use logging.
 
