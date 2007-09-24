@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.10 2007-09-20 09:06:26 hanke Exp $
+# $Id: connection.py,v 1.11 2007-09-24 14:44:43 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -390,7 +390,10 @@ class SocketConnection(Connection):
  
         try:
             self._lock.acquire()
-            self._socket.send(data)
+            try:
+                self._socket.send(data)
+            except:
+                raise IOError
             # WARNING: Seems not to bee needed, but may be cause
             # of problems too. I don't know.
             #self._socket.flush()
@@ -404,7 +407,11 @@ class SocketConnection(Connection):
     
     def close (self):
         """Close the connection."""
-        socket_.socket.shutdown(self._socket, os.O_RDWR)
+        try:
+            socket_.socket.shutdown(self._socket, os.O_RDWR)
+        except:
+            self.logger.debug("Can't shutdown socket")
+            raise IOError
         if self.logger:
             self.logger.debug("Socket connection closed")
         Connection.close(self)
