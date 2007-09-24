@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.3 2007-09-07 18:20:55 hanke Exp $
+# $Id: audio.py,v 1.4 2007-09-24 07:33:05 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -307,8 +307,10 @@ def receive_data(socket):
     if data_header != ['DATA']:
         raise "Missing DATA section"
     
-    audio_data = socket.read_data(data_length)
-    
+    if (data_length != 0):
+        audio_data = socket.read_data(data_length)
+    else:
+        audio_data = ""
     data_footer = socket.receive_line()
     log.debug("Data footer: " + str(data_footer))
     if data_footer != ['END', 'OF', 'DATA']:
