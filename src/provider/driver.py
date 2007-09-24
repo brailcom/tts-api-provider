@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: driver.py,v 1.4 2007-06-16 20:26:35 hanke Exp $
+# $Id: driver.py,v 1.5 2007-09-24 07:32:58 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -72,6 +72,8 @@ class RetrievalSocket(object):
         assert isinstance(port, int)
         self.host = host
         self.port = port
+
+        self._lock = thread.allocate_lock()
 
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -130,8 +132,12 @@ class RetrievalSocket(object):
         message += "END OF DATA"+ENDLINE
         
         # send it
-        self._socket.send(message)
-        
+        self._lock.acquire()
+        try:
+            self._socket.send(message)
+        finally:
+            self._lock.release()
+    
 class Core(object):
     """Core of the driver, takes care of TTS API communication etc."""
 
