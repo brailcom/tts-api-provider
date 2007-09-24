@@ -18,12 +18,13 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.9 2007-09-24 07:35:21 hanke Exp $
+# $Id: client.py,v 1.10 2007-09-24 14:43:42 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
 import sys
 import traceback
+import logging
 
 import connection
 from structures import *
