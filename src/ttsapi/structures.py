@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: structures.py,v 1.5 2007-06-16 18:03:44 hanke Exp $
+# $Id: structures.py,v 1.6 2007-09-24 07:35:00 hanke Exp $
 
 
 class Structure (object):
@@ -47,6 +47,15 @@ class Structure (object):
             setattr (self, name, value)
         if len(args) != 0:
             raise "Unknown argument(s): "+str(args)
+
+    def __str__(self):
+        description = ""
+        for a in self._attributes:
+            name = a[0]
+            value = getattr(self, name)
+            description += name + ": " + str(value) + "\n"
+
+        return description
             
     def attributes_dictionary(self):
         """Returns a dictionary of attribute names and their values"""
