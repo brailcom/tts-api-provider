@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.7 2007-09-19 12:56:57 hanke Exp $
+# $Id: provider.py,v 1.8 2007-09-24 07:35:45 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -81,7 +81,11 @@ class Provider(object):
                                                   pipe_out = process.stdin,
                                                   logger=log))
             log.debug("Driver instance for driver" + name + "created")
-            self.loaded_drivers[name].com.init()
+            try:
+                self.loaded_drivers[name].com.init()
+            except TTSAPIError, error:
+                log.debug("Can't initialize driver " + name)
+                continue
             log.debug("Driver instance for driver" + name + "initalized")
             self.loaded_drivers[name].real_capabilities \
                = self.loaded_drivers[name].com.driver_capabilities()
@@ -228,7 +232,7 @@ class Provider(object):
         assert index_mark == None or isinstance(index_mark, str)
         assert character == None or isinstance(character, int)
 
-        raise NotImplementedError
+        raise ErrorNotSupportedByServer
 
     def say_key (self, key):
         """Synthesize a key event.
@@ -279,7 +283,7 @@ class Provider(object):
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
         
-        self.current_driver.com.say_icon(icon)
+        Self.current_driver.com.say_icon(icon)
         
         return message_id
         
@@ -389,7 +393,7 @@ class Provider(object):
         method -- either 'relative' or 'absolute'          
         """
         assert isinstance(pitch, int)
-        return self.current_driver.com.set_pitch(rate, method)
+        return self.current_driver.com.set_pitch(pitch, method)
         
     def default_absolute_pitch(self):
         """Returns default absolute pitch for the given voice
@@ -419,14 +423,14 @@ class Provider(object):
         method -- either 'relative' or 'absolute'          
         """
         assert isinstance(volume, int)
-        raise NotImplementedError
+        raise ErrorNotSupportedByServer
         
     def default_absolute_volume(self):
         """Returns default absolute volume for the given voice
         as a positive number between 0 and 100.
         """
         assert len(data) > 0
-        raise NotImplementedError
+        raise ErrorNotSupportedByServer
 
     ## Style parameters
 
@@ -471,7 +475,7 @@ class Provider(object):
     
     def set_dictionary(self):
         """Set user dictionary. Exact behavior yet undefined."""
-        raise ErrorNotImplemented
+        raise ErrorNotSupportedByServer
 
     # Audio Output
     
