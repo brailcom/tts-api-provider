@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.8 2007-09-24 07:35:45 hanke Exp $
+# $Id: provider.py,v 1.9 2007-09-24 14:43:22 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -188,16 +188,18 @@ class Provider(object):
         position -- a positive value indicating the position
         of character where synthesis should start          
         """
-        assert isinstance(text, str)
+        assert isinstance(text, str) or isinstance(text, unicode)
         assert format in ('plain', 'ssml')
         assert position == None or isinstance(position, int)
         assert position_type in (None, 'message_begin', 'sentence_start',
                                  'sentence_end', 'word_start', 'word_end')
-        assert index_mark == None or isinstance(index_mark, str)
+        assert index_mark == None or isinstance(index_mark, str) \
+            or isinstance(text, unicode)
         assert character == None or isinstance(character, int)
         global current_message_id
 
-        current_message_id = message_id = self.global_state.new_message_id(self)
+        message_id = self.global_state.new_message_id(self)
+        current_message_id = message_id
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
 
@@ -208,7 +210,7 @@ class Provider(object):
         if format == 'plain':
             text = "<speak>" + text + "</speak>"
             format = 'ssml'
-                
+
         self.current_driver.com.say_text(text, format, position, position_type,
                                          index_mark, character)
         
@@ -229,7 +231,8 @@ class Provider(object):
         assert position == None or isinstance(position, int)
         assert position_type in (None, 'message_begin', 'sentence_start',
                                  'sentence_end', 'word_start', 'word_end')
-        assert index_mark == None or isinstance(index_mark, str)
+        assert index_mark == None or isinstance(index_mark, str) \
+            or isinstance(index_mark, unicode)
         assert character == None or isinstance(character, int)
 
         raise ErrorNotSupportedByServer
@@ -242,8 +245,9 @@ class Provider(object):
         in TTS API          
         """
         global current_message_id
-        assert isinstance(key, str)
-        current_message_id = message_id = self.global_state.new_message_id(self)
+        assert isinstance(key, str) or isinstance(key, unicode)
+        message_id = self.global_state.new_message_id(self)
+        current_message_id = message_id
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
                 
@@ -258,11 +262,12 @@ class Provider(object):
         Arguments:
         character -- a single UTF-32 character.          
         """
-        assert isinstance(character, str)
+        assert isinstance(character, str) or isinstance(character, unicode)
         assert len(character) == 1
         global current_message_id
 
-        current_message_id = message_id = self.global_state.new_message_id(self)
+        message_id = self.global_state.new_message_id(self)
+        current_message_id = message_id
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
                 
@@ -279,11 +284,12 @@ class Provider(object):
         assert isinstance(icon, str)
         global current_message_id
         
-        current_message_id = message_id = self.global_state.new_message_id(self)
+        message_id = self.global_state.new_message_id(self)
+        current_message_id = message_id
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
         
-        Self.current_driver.com.say_icon(icon)
+        self.current_driver.com.say_icon(icon)
         
         return message_id
         
@@ -296,7 +302,7 @@ class Provider(object):
         # Cancel playback in audio
         # Strictly speaking, we should only do this if 'emulated_playback' is used
         if current_message_id != None:
-            self.audio.post_event('stop', current_message_id)
+            self.audio.post_event('discard', current_message_id)
             
         # NOTE: We are not waiting until the cancel is completed in the driver
         return self.current_driver.com.cancel()
@@ -449,7 +455,7 @@ class Provider(object):
         detail -- a list of punctuation characters that
         should be explicitly indicated by the synthesizer          
         """
-        assert isinstance(detail, str)
+        assert isinstance(detail, str) or isinstance(detail, unicode)
         self.current_driver.com.set_punctuation_detail(detail)
 
     def set_capital_letters_mode(self, mode):
