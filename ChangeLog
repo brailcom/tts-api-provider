@@ -1,4 +1,36 @@
-2007-09-20  Jan Buchal  <hanke@syrr.buchal.name>
+2007-09-24  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/ttsapi/client.py (TCPConnection): Use logging.
+
+	* src/ttsapi/structures.py (Structure.__str__): New method.
+
+	* src/ttsapi/errors.py (TTSAPIError.__init__): Error description
+	argument renamed and moved to optional.
+	(TTSAPIError.__str__): New method.
+
+	* src/provider/driver.py (RetrievalSocket.send_data_block): Protect
+	socket.send() with a lock.
+
+	* src/provider/audio.py (receive_data): Only call read_data when
+	data_length != 0.
+
+
+	* src/ttsapi/server.py (TCPConnection.process_input): Report UnknownError on socket,
+	do not raise exception.
+	(TCPConnection._report_error): Accept exception classes as parameter.
+
+	* src/provider/driver.py (RetrievalSocket.__init__): Use lock to protect
+	data write on socket.
+
+	* src/ttsapi/server.py (TCPConnection.process_input): If
+	TTSAPIError is raised, try to translate it to the appropriate
+	Error exception.
+
+	* src/provider/provider.py (Provider.set_pitch): rate -> pitch
+
+	* src/provider/festival.py (FestivalConnection._read_to_buffer):
+	Prevent infinite loop when select.select signals activity but in
+	fact there is none (strange)
 
 	* src/ttsapi/client.py (TCPConnection.register_callback): Typo fixed if -> elif.
 
