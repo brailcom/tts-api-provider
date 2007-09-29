@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.5 2007-09-24 14:41:10 hanke Exp $
+# $Id: audio.py,v 1.6 2007-09-29 11:15:28 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -32,6 +32,7 @@ import socket
 import select
 import datetime
 import time
+import sleep
 
 #Import OpenAL Python bindings
 import pyopenal
@@ -42,6 +43,8 @@ import ttsapi
 from ttsapi.connection import *
 from ttsapi.structures import AudioEvent
 from configuration import Configuration
+
+messages_in_sources_sleeper = sleep.Sleeper()
 
 class MessageNotInPlayback(Exception):
     pass
@@ -89,6 +92,7 @@ class Audio(object):
         """Accept a track for message_id. This function 
         initializes the necessary data structures and tells
         the audio server to wait for incomming data."""
+        global messages_in_sources_sleeper
         
         if message_id in self.awaiting_message_data:
             raise "Message already in accept list"
@@ -100,7 +104,8 @@ class Audio(object):
         source = pyopenal.Source()
         self.sources[message_id] = source
         log.debug("Message " + str(message_id)  +" accepted for playback")
-        
+        messages_in_sources_sleeper.interrupt()        
+
     def play(self, message_id):
         """Start playback of the given message_id. Do nothing if it is
         already being played."""
@@ -149,7 +154,24 @@ class Audio(object):
             self.awaiting_message_data.remove(message_id)
         if message_id in self.sources:
             del self.sources[message_id]
-    
+
+    def set_volume(self, message_id, volume):
+        """Set audio volume. Volume is a floating point number.
+        0.0 is silent, 1.0 is the default volume. Value greater
+        than 1.0 means amplification, but may be truncated at some
+        value to prevent overflows."""
+
+        log.debug("Setting volume for " + str(message_id) + " to " + str(volume))
+        if message_id not in self.sources:
+            raise "Unknown source"
+
+        source = self.sources[message_id]
+        try:
+            # Set volume through PyOpenAL
+            source.gain = float(volume)
+        except Exception, e:
+            log.error("Can't set volume. Received exception: " + str(e))
+
     def add_data(self, message_id, data, format, sample_rate,
                  channels, encoding):
         """Add new data to track assigned to message_id with the
@@ -213,6 +235,9 @@ def init(logger):
     audio_ctrl_request = event.EventQueue()
     audio_events = event.EventQueue()
 
+    # Sleeper for events dispatching
+    event_sleeper = sleep.Sleeper()
+
     # Start playback thread
     playback_thread = threading.Thread(target=playback,
                                     name="Audio-playback")
@@ -220,18 +245,21 @@ def init(logger):
 
     # Start audio events handling thread
     events_thread = threading.Thread(target=events,
-                                       name="Audio-events")
+                                     name="Audio-events",
+                                     kwargs = {'sleeper' : event_sleeper})
     events_thread.start()
 
     # Start connection handling thread
-    connection_handling_thread = threading.Thread(target=connection_handling,
-                                    name="Audio-connections")
+    connection_handling_thread = threading.Thread(
+        target=connection_handling,
+        name="Audio-connections",
+        kwargs = {'event_sleeper' : event_sleeper})
     connection_handling_thread.start()
     
     global audio
     audio = Audio()
     
-def receive_data(socket):
+def receive_data(socket, event_sleeper):
     """Receive a block of data as defined in TTS API
     over socket"""
 
@@ -305,6 +333,12 @@ def receive_data(socket):
                                                      pos_text = int(entry[2]),
                                                      pos_audio = int(entry[3]),
                                                      message_id=msg_id))
+        if len(event_lines) > 0:
+            # Interrupt event sleeper and give it a chance
+            # to recalculate when the next callback should be
+            # sent
+            event_sleeper.interrupt()
+
         data_header = socket.receive_line()
     else:
         data_header = event_header
@@ -326,7 +360,7 @@ def receive_data(socket):
     log.debug("OK data received, sending to audio")
     audio.add_data(msg_id, audio_data, "raw", sample_rate, 1, "S16_LE")
     
-def connection_handling():
+def connection_handling(event_sleeper):
     """Handle incomming connections and read data into buffers
     in a separate thread."""
     
@@ -358,11 +392,12 @@ def connection_handling():
             if sock.fileno() == server_socket.fileno():
                 (client_socket, address) = server_socket.accept()
                 log.info("Adding new audio client on socket " + str(client_socket.fileno()))
-                client_list.append(SocketConnection(socket=client_socket, logger=log, side='server'))
+                client_list.append(SocketConnection(socket=client_socket,
+                                                    logger=log, side='server'))
             else:
                 try:
                     log.info("Receiving data from socket " + str(sock.fileno()))
-                    receive_data(sock)
+                    receive_data(sock, event_sleeper)
                 except IOError:
                     log.info("Audio client on socket " + str(sock.fileno()) + " gone.")
                     client_list.remove(sock)        
@@ -387,7 +422,7 @@ def playback():
         else:
             raise "Unknown event"
 
-def events():
+def events(sleeper):
     """Keep track of actual playing time of all messages, messages currently in
     playback and calculate positions of events. When a message event gets
     negative position in time, dispatch the appropriate notice event."""
@@ -419,10 +454,6 @@ def events():
                     continue
                 
             playback_time = since_start + message.rewinded
-            # IDEA: An internal event called pass inserted
-            # at the end of each audio block. It will allow
-            # us to wait without taking CPU at the end of each
-            # block.
             for event in event_list[id]:
                 if not event.dispatched:
                     dte = datetime.timedelta(milliseconds=event.pos_audio)-playback_time
@@ -436,26 +467,27 @@ def events():
                     elif ms < min:
                         min = ms
 
-        # Sleep as long as we can, but not less than 10 miliseconds.
-        if min > 10 and min != NOT_ASSIGNED:
-            # TODO: This sleep must be interruptible on addition
-            # of new events into event_list when we will
-            # simultaneously play more than one message.
-            # On each addition, the value of min must be
-            # recalculated.
-            # log.debug("Sleeping " + str(min/1000.0) + " ms")
+        # Sleep as long as we can, but not less than 5 miliseconds.
+        if min > 5:
+            # The following sleep is interrupted each time new
+            # events are added to the event_list, so that
+            # the sleeping time can be recalculated
             log.debug("Sleeping " + str(min) +" ms")
-            time.sleep(min/1000.0)
+            sleeper.sleep(min/1000.0)
         else:
-            # log.debug("Sleeping 10ms")
-            log.debug("Sleeping 10ms")
-            time.sleep(0.01)
+            log.debug("Sleeping 5ms")
+            sleeper.sleep(0.005)
+        
+        #TODO: Calculate callback timing errors, check the performance
 
-            #TODO: Calculate callback timing errors, check the performance
-
-def post_event(type, message_id):
+def post_event(type, message_id, blocking=False):
     """Post event to controll audio server"""
+    global messages_in_sources_sleeper
+
     log.debug("Posting event " + type + " " + str(message_id))
-    audio_ctrl_request.push(CtrlRequest(type=type, message_id = message_id))
+    audio_ctrl_request.push(CtrlRequest(type=type, message_id=message_id))
     
-    
+    if blocking:
+        # Wait until the request is processed
+        while message_id not in audio.sources:
+            messages_in_sources_sleeper.sleep(2*60)
