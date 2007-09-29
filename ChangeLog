@@ -1,3 +1,20 @@
+2007-09-29  Hynek Hanke  <hanke@homer.brailcom.xx>
+
+	* src/ttsapi/server.py (TCPConnection._report_error): Accept
+	also TTSAPIError.
+
+	* src/ttsapi/errors.py (TTSAPIError.__str__): Fixed.
+
+	* src/provider/audio.py (Audio.set_volume): New function.
+	(post_event): Added blocking mode.
+
+	* src/provider/provider.py (Provider.set_volume): Handle volume settings.
+
+	* src/provider/audio.py (events): Use sleep.Sleeper() for sleeping.
+	(receive_data): If events are received, call event_sleeper.interrupt()
+
+	* src/provider/sleep.py (Sleeper): New module/class.
+
 2007-09-24  Hynek Hanke  <hanke@homer.brailcom.xx>
 
 	* src/ttsapi/connection.py (SocketConnection._write): Raise IOError
