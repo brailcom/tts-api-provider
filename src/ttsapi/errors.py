@@ -97,5 +97,12 @@ class TTSAPIError (_CommunicationError):
         self.data = data
     
     def __str__(self):
-        a = "Error  " + str(self.code) 
-        return a
+        if self.msg != None:
+            err = "Error  " + str(self.code) + " " + self.msg
+        else:
+            err = "Error " + str(self.code)
+
+        if self.data != None:
+            err += "\n Provided data: " + self.data
+
+        return err
