@@ -392,8 +392,13 @@ class TCPConnection(object):
         """Report error on the connection according to self._errors_map.
 
         Arguments:
-        error -- a numerical code of the error or an exception class"""
-        if error in self.errors_map:
+        error -- instance of TTSAPIError or an exception class"""
+        
+        if isinstance(error, TTSAPIError):
+            err_code = error.code
+            err_reply = error.msg
+            err_detail = "Error data: " + error.data
+        elif error in self.errors_map:
             entry = self.errors_map[error]
             err_code = entry[0]
             err_reply = entry[1]
@@ -492,7 +497,8 @@ class TCPConnection(object):
                 self._report_error(err);
                 return
             except TTSAPIError, err:
-                self._report_error(err.code);
+                self.logger.debug("TTS API ERROR with code " + str(err.code))
+                self._report_error(err);
                 return
             except Exception, e:
                 self.logger.info("ERROR: Can't execute function, following is the reason: "
