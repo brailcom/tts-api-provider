@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.9 2007-09-24 14:43:22 hanke Exp $
+# $Id: provider.py,v 1.10 2007-09-29 11:15:52 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -57,6 +57,7 @@ class Provider(object):
 
     _connection = None
     _registered_callbacks = {}
+    _audio_volume = 1.0
 
     def __init__ (self, logger, configuration, audio,
                   global_state):
@@ -157,13 +158,15 @@ class Provider(object):
         # know there will be an incomming message and set the
         # proper destination on the driver.
         if self.current_driver.audio_output == 'emulated_playback':
-            self.audio.post_event('accept', message_id)
+            self.audio.post_event('accept', message_id, blocking=True)
             try:
                 self.current_driver.com.set_audio_retrieval_destination(host=self.audio.host,
                     port=self.audio.port)
             except TTSAPIError, error:
                 log.error("Error in output module: " + str(error))
                 raise DriverError
+
+        self.audio.audio.set_volume(message_id, self._audio_volume)
 
     def say_text (self, text, format='plain',
                   position = None, position_type = None,
@@ -420,7 +423,9 @@ class Provider(object):
         pass
         
     def set_volume(self, volume, method='relative'):
-        """Set relative or absolute volume.
+        """Set relative or absolute volume. This setting only
+        affects the following messages, not the message currently
+        in playback.
 
         Arguments:
         volume -- desired pitch change with respect to default represented
@@ -429,8 +434,15 @@ class Provider(object):
         method -- either 'relative' or 'absolute'          
         """
         assert isinstance(volume, int)
-        raise ErrorNotSupportedByServer
-        
+        global current_message_id
+
+        if method == 'relative':
+            self._audio_volume = volume / 100.0
+        elif method == 'absolute':
+            self._audio_volume = 2 * volume / 100.0
+        else:
+            raise "Unknown method"
+
     def default_absolute_volume(self):
         """Returns default absolute volume for the given voice
         as a positive number between 0 and 100.
