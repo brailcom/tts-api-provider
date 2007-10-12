@@ -31,7 +31,7 @@ class _TTSAPITest(unittest.TestCase):
         stdout_handler = logging.StreamHandler(sys.stdout)
         self.logger = logging.Logger('TTS API Tests',
                                      level=logging.DEBUG)
-        self.logger.addHandler(stdout_handler)
+        #self.logger.addHandler(stdout_handler)
         self._client = ttsapi.client.TCPConnection(method='socket',
                                                    logger=self.logger)
 
@@ -157,8 +157,9 @@ class VoiceTest(_TTSAPITest):
     
     def test_punctuation_detail(self):
         """Test punctuation detail settings"""
-        self._client.set_punctuation_detail("?>.")
-        self._client.say_text("Punctuation ?!.<>")
+        if self._client.driver_capabilities().can_set_punctuation_detail:
+            self._client.set_punctuation_detail("?>.")
+            self._client.say_text("Punctuation ?!.<>")
 
     def test_capital_letters_mode(self):
         """Test supported capitall letters modes"""
