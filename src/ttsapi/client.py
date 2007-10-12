@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.10 2007-09-24 14:43:42 hanke Exp $
+# $Id: client.py,v 1.11 2007-10-12 08:11:31 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -29,6 +29,7 @@ import logging
 import connection
 from structures import *
 from errors import TTSAPIError
+import copy
 
 # --------------- TTS API --------------------------
 
@@ -43,15 +44,6 @@ d    available from
     http://www.freebsoft.org/doc/tts-api/
     """
 
-    _callbacks = {
-        'message_start' : [],
-        'message_end' : [],
-        'sentence_start' : [],
-        'sentence_end' : [],
-        'word_start' : [],
-        'word_end' : [],
-        'index_mark' : []
-        }
 
     def __init__ (self, method='socket', host='127.0.0.1', port=6567,
                   pipe_in = sys.stdin, pipe_out = sys.stdout, logger=None):
@@ -65,6 +57,17 @@ d    available from
           
         """
         assert method in ['socket', 'pipe']
+
+        self._callbacks = {
+            'message_start' : [],
+            'message_end' : [],
+            'sentence_start' : [],
+            'sentence_end' : [],
+            'word_start' : [],
+            'word_end' : [],
+            'index_mark' : [],
+        }
+
         if logger:
             self.logger = logger
         else:
@@ -563,16 +566,28 @@ d    available from
         event.type = line[0]
         event.message_id = line[1]
         if event.type in ['message_start', 'message_end']:
-            event.pos_text, event.pos_audio = map(float, line[2:])
+            if line[2] != 'None':
+                event.pos_text = int(line[2])
+            if line[3] != 'None':
+                event.pos_audio = int(line[3])
         elif event.type in ['sentence_start', 'sentence_end', 'word_start', 'word_end']:
-            event.n, event.pos_text, event.pos_audio = map(float, line[1:])
+            if line[2] != 'None':
+                event.n = int(line[1])
+            if line[3] != 'None':
+                event.pos_text = int(line[2])
+            if line[4] != 'None':
+                event.pos_audio = int(line[3])
         elif type == 'index_mark':
             name = line[1].strip('"')
-            event.pos_text, event.pos_audio = map(fload, line[2:])
+            if line[2] != 'None':
+                event.pos_text = int(line[1])
+            if line[3] != 'None':
+                event.pos_audio = int(line[2])
         else:
             raise "Unknown index mark"
 
         # Call all registered callbacks in random order
+        
         if event.type in self._callbacks:
             for callback in self._callbacks[event.type]:
                 try:
