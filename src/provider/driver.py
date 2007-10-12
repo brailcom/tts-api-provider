@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: driver.py,v 1.6 2007-10-12 08:11:59 hanke Exp $
+# $Id: driver.py,v 1.7 2007-10-12 08:37:45 hanke Exp $
  
 """TTS API driver logic"""
 
@@ -530,6 +530,12 @@ class Core(object):
         assert isinstance(host, str)
         assert isinstance(port, int) and port > 0
         raise ErrorNotSupportedByDriver
+
+    def register_callback(self, connection, function):
+        """Register callback (do nothing by default)"""
+
+        pass
+
 
 # ----------------------------------------------------------------
 
