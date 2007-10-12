@@ -19,7 +19,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: server.py,v 1.7 2007-09-20 09:06:56 hanke Exp $
+# $Id: server.py,v 1.8 2007-10-12 08:11:43 hanke Exp $
 
 import sys
 import socket
@@ -220,7 +220,9 @@ def main():
 
     client_threads = []
     while True:
-        (client_socket, address) = server_socket.accept()        
+        log.info("Waiting for connections")
+        (client_socket, address) = server_socket.accept()
+        log.debug("Connection ready")
         client_provider = threading.Thread(target=serve_client,
                          name="Provider ("+str(client_socket.fileno())+")",
                          kwargs={'method':'socket',
