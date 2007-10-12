@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: configuration.py,v 1.4 2007-06-18 09:59:51 pdm Exp $
+# $Id: configuration.py,v 1.5 2007-10-12 08:16:57 hanke Exp $
 
 import logging
 import os
@@ -137,16 +137,36 @@ class Configuration(object):
             },
         'available_drivers':
             {
-                'descr': "List of module names and their executables",
-                'doc':None,
+                'descr': "List of driver names and their executables",
+                'doc': None,
                 'type': object,
                 'default': [('festival',
-                             os.path.join (os.path.dirname (__file__), 'festival.py'),)]
+                             os.path.join (os.path.dirname (__file__), 'festival.py'),                             
+                             ),
+                            ('sd_espeak',
+                             os.path.join (os.path.dirname (__file__), 'sd_module.py'),
+                             ["Espeak",
+                              "/usr/lib/speech-dispatcher-modules/sd_espeak",
+                              "/etc/speech-dispatcher/modules/espeak.conf"]
+                             ),
+                            ('sd_festival',
+                             os.path.join (os.path.dirname (__file__), 'sd_module.py'),
+                             ["Festival",
+                              "/usr/lib/speech-dispatcher-modules/sd_festival",
+                              "/etc/speech-dispatcher/modules/festival.conf"]
+                             ),
+                            ('sd_flite',
+                             os.path.join (os.path.dirname (__file__), 'sd_module.py'),
+                             ["Flite",
+                              "/usr/lib/speech-dispatcher-modules/sd_flite",
+                              "/etc/speech-dispatcher/modules/flite.conf"]
+                             ),
+                            ]
             },
         'default_driver':
             {
                 'descr': "Default driver",
-                'doc':None,
+                'doc': "Name of the default driver as specified in 'available_drivers'",
                 'type':str,
                 'default': "festival"
             }
