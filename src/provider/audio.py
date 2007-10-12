@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.6 2007-09-29 11:15:28 hanke Exp $
+# $Id: audio.py,v 1.7 2007-10-12 08:17:04 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -28,6 +28,7 @@ Audio server runs in two threads:
         output events emission"""
 
 import threading
+import thread
 import socket
 import select
 import datetime
@@ -67,6 +68,8 @@ class PlaybackInfo(object):
 
 # Dictionary of message_id:PlaybackInfo() entries
 messages_in_playback = {}
+messages_in_playback_lock = thread.allocate_lock()
+
 
 # --- AUDIO FUNCTIONALITY ---
 
@@ -110,50 +113,64 @@ class Audio(object):
         """Start playback of the given message_id. Do nothing if it is
         already being played."""
 
-        if messages_in_playback.has_key(message_id):
-            pass
+        messages_in_playback_lock.acquire()
+        try:
+            if messages_in_playback.has_key(message_id):
+                pass
 
-        # Start playback
-        source = self.sources[message_id]
-        source.play()
+            # Start playback
+            source = self.sources[message_id]
+            source.play()
 
-        # Save playback info
-        messages_in_playback[message_id] = PlaybackInfo()
-        messages_in_playback[message_id].source = source
-        messages_in_playback[message_id].started = datetime.datetime.now()
-        
+            # Save playback info
+            messages_in_playback[message_id] = PlaybackInfo()
+            messages_in_playback[message_id].source = source
+            messages_in_playback[message_id].started = datetime.datetime.now()
+        finally:
+            messages_in_playback_lock.release()
         log.debug("Source for message " + str(message_id)  +" playing")
     
     def stop(self, message_id):
         """Stop playback of track assigned to given message_id
         and discard it (seee Audio.discard())"""
 
-        if not messages_in_playback.has_key(message_id):
-            raise MessageNotInPlayback
+        messages_in_playback_lock.acquire()
+        try:
 
-        # Stop playback
-        source = self.sources[message_id]
-        source.stop()
+            if not messages_in_playback.has_key(message_id):
+                raise MessageNotInPlayback
+
+            # Stop playback
+            source = self.sources[message_id]
+            source.stop()
         
-        # Remove playback info
-        del messages_in_playback[message_id]
+            # Remove playback info
+            del messages_in_playback[message_id]
 
-        # Discard this track
-        self.discard(message_id)
-    
+            # Discard this track
+            self.discard(message_id)
+        finally:
+            messages_in_playback_lock.release()
+
+
     def discard(self, message_id):
         """Discard track assigned to message_id"""
 
-        # If still playing, stop
-        if messages_in_playback.has_key(message_id):
-            self.stop(message_id)
+        messages_in_playback_lock.acquire()
+        try:
+
+            # If still playing, stop
+            if messages_in_playback.has_key(message_id):
+                self.stop(message_id)
     
-        # Remove playback info, not awaiting data any more, remove source,
-        # clean-up
-        if message_id in self.awaiting_message_data:
-            self.awaiting_message_data.remove(message_id)
-        if message_id in self.sources:
-            del self.sources[message_id]
+            # Remove playback info, not awaiting data any more, remove source,
+            # clean-up
+            if message_id in self.awaiting_message_data:
+                self.awaiting_message_data.remove(message_id)
+            if message_id in self.sources:
+                del self.sources[message_id]
+        finally:
+            messages_in_playback_lock.release()
 
     def set_volume(self, message_id, volume):
         """Set audio volume. Volume is a floating point number.
@@ -348,7 +365,9 @@ def receive_data(socket, event_sleeper):
         raise "Missing DATA section"
     
     if (data_length != 0):
+        log.debug("Reading data of length " + str(data_length))
         audio_data = socket.read_data(data_length)
+        assert len(audio_data) == data_length
     else:
         audio_data = ""
     data_footer = socket.receive_line()
@@ -436,6 +455,9 @@ def events(sleeper):
         NOT_ASSIGNED = 86000000
         min = NOT_ASSIGNED
 
+        
+        messages_in_playback_lock.acquire()
+
         for id, message in messages_in_playback.iteritems():
             state = message.source.get_state()
             #TODO: Possible race with message.started
@@ -466,6 +488,8 @@ def events(sleeper):
                         event.dispatched=True
                     elif ms < min:
                         min = ms
+
+        messages_in_playback_lock.release()
 
         # Sleep as long as we can, but not less than 5 miliseconds.
         if min > 5:
