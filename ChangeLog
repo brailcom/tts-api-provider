@@ -1,5 +1,7 @@
 2007-10-12  Hynek Hanke  <hanke@syrr.buchal.name>
 
+	* doc/tts-api-provider.texi: @function -> @code, @textit -> @code
+
 	* src/provider/driver.py (Core.register_callback): New function.
 
 2007-10-12  Hynek Hanke  <hanke@syrr.buchal.name>

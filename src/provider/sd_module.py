@@ -19,7 +19,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: sd_module.py,v 1.1 2007-10-12 08:19:32 hanke Exp $
+# $Id: sd_module.py,v 1.2 2007-10-12 09:54:39 hanke Exp $
 
 """Interface to Speech Dispatcher modules"""
 
@@ -483,7 +483,7 @@ class Core(driver.Core):
     def driver_capabilities(self):
         """Return driver capabilities"""
         return DriverCapabilities(
-            can_list_voices = True,
+            can_list_voices = False,
             rate_settings = ['relative'],
             pitch_settings = ['relative'],
             punctuation_modes = ['all', 'none', 'some'],
