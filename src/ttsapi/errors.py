@@ -53,6 +53,12 @@ class ErrorInternal(ServerError):
     def traceback(self):
         return self._traceback
 
+class ErrorDriverNotAvailable(ServerError):
+    """Driver not available. It could fail to load or crash during
+    operation or fail to be available at the moment for some other
+    reason."""
+    pass
+
 class ErrorInvalidCommand(ClientError):
     """Invalid command, wrong formating of parameters etc."""
     pass
