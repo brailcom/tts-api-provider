@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.11 2007-09-24 14:44:43 hanke Exp $
+# $Id: connection.py,v 1.12 2007-10-12 08:11:25 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -26,6 +26,7 @@ import socket as socket_
 import string
 import sys
 import os
+from copy import copy
 
 try:
     import threading
@@ -367,9 +368,20 @@ class SocketConnection(Connection):
 
     def read_data(self, bytes):
         """Read the specified amount of data"""
-        result, bytes_to_read = self._buffer, bytes-len(self._buffer)
-        self._buffer = ""
-        
+        if bytes > len(self._buffer):
+            # First read data from buffer
+            result  = self._buffer
+            bytes_to_read = bytes-len(self._buffer)
+            self._buffer = ""
+            # Calculate how much more data do we have to read
+        else:
+            # Data waiting in buffer is larger than what
+            # we actually want to read now
+            result = copy(self._buffer[:bytes])
+            # Strip the already read data from buffer
+            self._buffer = self._buffer[bytes:]
+            bytes_to_read = 0
+
         while bytes_to_read > 4096:
             data = self._socket.recv(4096)
             result += data
@@ -444,6 +456,10 @@ class PipeConnection(Connection):
         line = self.pipe_in.readline().rstrip(self.NEWLINE)
         if self.logger:
             self.logger.debug("Received over pipe: %s",  line)
+
+        if len(line) == 0:
+            raise IOError
+            
         return line
         
     def _write(self, data):
