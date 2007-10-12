@@ -18,8 +18,9 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: structures.py,v 1.6 2007-09-24 07:35:00 hanke Exp $
+# $Id: structures.py,v 1.7 2007-10-12 08:10:54 hanke Exp $
 
+from copy import copy
 
 class Structure (object):
     """Simple data structures.
@@ -41,7 +42,7 @@ class Structure (object):
                     value = args[name]
                     del args[name]
                 else:
-                    value = a[2]
+                    value = copy(a[2])
             else:
                 value = args[name]
             setattr (self, name, value)
