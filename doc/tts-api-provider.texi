@@ -344,8 +344,8 @@ though currently text-based TCP (or pipes) is the only option.
 @heading Connection handling
 
 When a new connection is obtained, a new thread is created running the
-@function{serve_client} function found in the same source
-file. @function{serve_client} starts a new @code{provider.Provider}
+@code{serve_client} function found in the same source
+file. @code{serve_client} starts a new @code{provider.Provider}
 object. The global logging, configuration, audio (subsystem) are
 passed to the Provider object on initialization.
 
@@ -363,7 +363,7 @@ the device drivers. It roughly implements the Python version of TTS API.
 
 One thread is launched by the TTS API Provider right on its start.  It
 is the Audio Event Delivery Thread running as function
-@function{audio_event_delivery} implemented in @file{src/server.py}.
+@code{audio_event_delivery} implemented in @file{src/server.py}.
 This thread listens for all audio events delivered to TTS API Provider
 from the audio subsystem and dispatches them to the various
 @code{provider.Provider} objects associated with the appropriate
@@ -378,7 +378,7 @@ appears that fulfills the Accessibility Audio Framework Requirements
 and drop our own codebase). Once such a transition is achieved, events
 will necessarily be delivered into the server as a whole, not directly
 to the @code{provider.Provider} instances, so it will only be
-necessary to modify the @function{audio_event_delivery} method if this
+necessary to modify the @code{audio_event_delivery} method if this
 strict separation is maintained.
 
 For more information about the audio subsystem, please see @xref{Audio
@@ -387,17 +387,17 @@ Subsystem (implementation)}.
 @heading Provider Object
 
 The @code{Provider} object is implemented in the file
-@{src/provider.py} and implements the core functionality of TTS API
+@file{src/provider.py} and implements the core functionality of TTS API
 Provider in a client-server communication method independent way. On
 initialization, it starts its own set of device driver
 processes. Communication with the device drivers is currently led in
 the text-based pipe version of TTS API, the same code in
 @file{src/ttsapi/server.py} is used as for communication between
 clients and provider. Please refer to TTS API definition document,
-@xref{Python TTS API} and the source code itself for description of
+@xref{Python TTS API}, and the source code itself for description of
 the available methods and their function.
 
-With regards to @textit{emulation} of missing capabilities in the
+With regards to @code{emulation} of missing capabilities in the
 drivers: Ideally, all emulation should be done in the provider object
 by cooperation with its subsystems whenever the driver reports that a
 capability is not available. Generally useful emulations like
@@ -405,7 +405,7 @@ character caching, defer, text-substitution (punctuation, capital
 letters) and index marking emulation etc. should not be done in the
 drivers as this unnecessarily blows their codebase, reduces
 readability and necessarily leads to duplication of code. Emulations
-that do not emulate TTS API @textit{MUST HAVE} functionality must be
+that do not emulate TTS API @code{MUST HAVE} functionality must be
 configurable.
 
 The provider object recognizes three audio output methods:
@@ -416,7 +416,7 @@ The provider object recognizes three audio output methods:
 audio subsystem for playback
 @end itemize
 
-Methods @textit{retrieval} and @textit{emulated_playback} are only
+Methods @code{retrieval} and @code{emulated_playback} are only
 available if the device can return the synthesized data to the caller.
 For simple hardware synthesizers, only method playback is available.
 However, when both playback and retrieval are available by the device
@@ -426,7 +426,7 @@ and we do not have to deal with the (usually numerous) bugs in
 synthesizers implementation of audio output (device blocking etc.)
 according to the TTS API Provider design decisions.
 
-If method @textit{emulated_playback} is being used, the @function{say_}
+If method @code{emulated_playback} is being used, the @code{say_}
 functions need to notify the audio subsystem about the new message
 identification and tell it to expect new audio data in its audio data bin.
 Also request for playback must be sent whenever necessary. Please see the
