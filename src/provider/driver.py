@@ -18,9 +18,9 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: driver.py,v 1.5 2007-09-24 07:32:58 hanke Exp $
+# $Id: driver.py,v 1.6 2007-10-12 08:11:59 hanke Exp $
  
-"""TTS API Provider core logic"""
+"""TTS API driver logic"""
 
 import sys
 import thread
@@ -42,7 +42,7 @@ class CtrlRequest(event.Event):
     _attributes = {
         'type': ("Type of the event",
                  ("say_text", "say_deferred", "say_char","say_key", "say_icon",
-                  "cancel", "defer", "discard")),
+                  "cancel", "defer", "discard", "quit")),
         'text': ("Text of message",  ("say_text","say_key", "say_char", "say_icon")),
         'format': ("Format of the message", ("say_text",)),
         'position': ("Position in text", ("say_text", "say_deferred")),
@@ -133,8 +133,12 @@ class RetrievalSocket(object):
         
         # send it
         self._lock.acquire()
+        total_bytes = len(message)
+        bytes_sent = 0
         try:
-            self._socket.send(message)
+            while bytes_sent < total_bytes:
+                bytes_sent += self._socket.send(message[bytes_sent:])
+                log.debug("Sent " + str(bytes_sent) + " out of " + str(total_bytes) + " data len" + str(len(audio_data)))
         finally:
             self._lock.release()
     
@@ -164,13 +168,12 @@ class Core(object):
     def quit(self):
         """Terminate the driver"""
         log.info("Terminating");
-        #TODO: This causes a deadlock. Why?
-        #self.controller.quit()
-        #log.debug("Joining controller thread");
-        #self.controller.join()
-        log.debug("Exiting");
-        sys.exit(0)
-
+        ctrl_thread_requests.push(CtrlRequest(type='quit'))
+        
+        log.debug("Joining controller thread");
+        self.controller.join()
+        log.debug("End of quit in core");
+        
     # Driver discovery
 
     def drivers(self):
@@ -562,6 +565,8 @@ class Controller(threading.Thread):
                 self.defer()
             elif e.type == 'discard':
                 self.discard(e.message_id)
+            elif e.type == 'quit':
+                self.quit()
             else:
                 raise "Unknown event type"
 
@@ -676,6 +681,10 @@ class Controller(threading.Thread):
 class Configuration(object):
     pass
     
+
+def EventCallback(connection, event):
+    connection.send_audio_event(event)
+
 def main_loop(Core, Controller):
     """Main function and core read-process-notify loop of a driver"""
     global log
@@ -698,7 +707,13 @@ def main_loop(Core, Controller):
     driver_comm = ttsapi.server.TCPConnection(provider=driver_core,
                                               logger=log, method='pipe')
 
+    driver_comm.provider.register_callback(driver_comm, EventCallback)
+
     while True:
         # Process input, call appropriate Core and Controller functions
         # according to TTS API specifications
-        driver_comm.process_input()
+        try:
+            driver_comm.process_input()
+        except ttsapi.server.ClientGone:
+            log.info("Client gone, terminating")
+            return
