@@ -309,8 +309,9 @@ class TCPConnection(object):
             (ErrorNotSupportedByDriver, (301, 'NOT SUPPORTED BY DRIVER')),
             (ErrorNotSupportedByServer, (302, 'NOT SUPPORTED BY SERVER')),
             (ErrorAccessToDriverDenied, (303, 'DRIVER ACCESS DENIED')),
-            (ErrorDriverNotLoaded, (303, 'DRIVER NOT LOADED')),
-            (ErrorRetrievalSocketNotInitialized, (304, 'RETRIEVAL SOCKET NOT INITIALIZED')),
+            (ErrorDriverNotLoaded, (304, 'DRIVER NOT LOADED')),
+            (ErrorRetrievalSocketNotInitialized, (305, 'RETRIEVAL SOCKET NOT INITIALIZED')),
+            (ErrorDriverNotAvailable, (303, 'DRIVER NOT AVAILABLE')),
             (ErrorInternal, (399, 'INTERNAL ERROR')),
             (ErrorInvalidCommand, (400, 'INVALID COMMAND')),
             (ErrorInvalidArgument, (401, 'INVALID ARGUMENT')),
@@ -462,7 +463,7 @@ class TCPConnection(object):
                 template, action = self.commands_map[pos]
                 if self._cmd_matches(cmd, template):
                     break
-            except Error, error:
+            except Error, error: 
                 self._report_error(error)
                 return
         else:
@@ -493,17 +494,22 @@ class TCPConnection(object):
                 else:
                     result = function(**arg_dict)
             #TODO: Unify this
+            except ClientGone:
+                raise ClientGone
             except Error, err:
-                self._report_error(err);
+                if action['reply']:
+                    self._report_error(err);
                 return
             except TTSAPIError, err:
                 self.logger.debug("TTS API ERROR with code " + str(err.code))
-                self._report_error(err);
+                if action['reply']: 
+                    self._report_error(err);
                 return
             except Exception, e:
                 self.logger.info("ERROR: Can't execute function, following is the reason: "
                                  + traceback.format_exc())
-                self._report_error(UnknownError)
+                if action['reply']:
+                    self._report_error(UnknownError)
                 return
 
         if action.has_key('function_post_hook'):
@@ -532,23 +538,27 @@ class TCPConnection(object):
 
 def tcp_format_event(event):
         """Format event line according to text protocol specifications"""
+        if event.pos_audio != None:
+            pos_audio = int(event.pos_audio)
+        else:
+            pos_audio = None
         if event.type in ('message_start', 'message_end'):
             event_line = event.type + " " + str(event.message_id) \
                          +  " " + str(event.pos_text) + " " \
-                       + str(int(event.pos_audio))
+                       + str(pos_audio)
             code = 701
         elif event.type in ('word_start', 'word_end',
                             'sentence_start', 'sentence_end'):
             event_line = event.type + " " + str(event.message_id) \
                        + " " +str(event.n) + " " \
                        + str(event.pos_text)  + " " \
-                       + str(int(event.pos_audio))
+                       + str(pos_audio)
             code = 702
         elif event.type == 'index_mark':
             event_line = event.type + " " + str(event.message_id) \
                        + ' "' + event.name + '" ' \
                        + str(event.pos_text)  + " " \
-                       + str(int(event.pos_audio))
+                       + str(pos_audio)
             code = 703
         else:
             raise NotImplementedError
