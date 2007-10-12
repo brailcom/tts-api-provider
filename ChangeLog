@@ -1,4 +1,70 @@
+2007-10-12  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/ttsapi/structures.py (Structure.__init__): Default
+	value is now being copied, not assigned, to each new
+	structure.
+
+	* src/ttsapi/errors.py (ErrorDriverNotAvailable): New error class.
+
+	* src/ttsapi/connection.py (PipeConnection._read_line): Raise
+	IOError when 0 bytes is read.o
+
+	* src/ttsapi/client.py (TCPConnection.__init__): Init
+	of self._callbacks moved here from the class body.
+	(TCPConnection.raise_event): Handle parameters of different
+	events correctly.
+
+	* src/provider/server.py (main): Added debug messages.
+
+	* src/provider/provider.py (Provider.__init__): Append a unique
+	string to every driver log filename.
+	(Provider.__init__): Fallback on other available module if
+	the default module is not available.
+
+	* src/provider/festival.py (FestivalConnection.close): New function.
+	(Core.quit): New function.
+	(Core.drivers): Driver version incremented.
+	(Core.driver_capabilities): Punctuation detail marked as not
+	supported.
+
+	* src/provider/driver.py (Core.quit): Rewritten.
+	(EventCallback): New function.
+	(main_loop): Handle ttsapi.server.CliengGone exception
+
+	* src/provider/configuration.py ('Configuration
+	'available_drivers'): Typo in docstring.
+	(Configuration 'available_drivers'): Added configuration for
+	speech dispatcher modules.
+	(Configuration 'default_driver'): Docstring added.
+
+	* src/provider/audio.py (messages_in_playback_lock): Added new
+	lock. Apply this lock to all accesses to messages_in_playback.
+
+	* src/ttsapi/connection.py (PipeConnection._read_line): If 0 bytes
+	is read, raise IOError.
+	(SocketConnection.read_data): Handle the situation when more
+	data is waiting in the _buffer than what we need.
+
+	* src/provider/driver.py (Controller.run): Added new event 'quit'
+
+	* src/ttsapi/server.py (TCPConnection.process_input): Do not report
+	error back to socket if reply is None.
+	(TCPConnection.process_input): Pass ClientGone up.
+
+	* src/ttsapi/_tests.py (VoiceTest.test_punctuation_detail): Only
+	request punctuation detail settings if supported by the driver.
+
+	* src/ttsapi/errors.py (ErrorDriverNotAvailable): New error.
+
 2007-09-29  Hynek Hanke  <hanke@homer.brailcom.xx>
+
+	* src/provider/sd_module.py: New module. Support for Speech Dispatcher
+	modules.
+
+	* src/provider/provider.py (Provider._prepare_for_message): Only try to set
+	volume through audio if we are in emulated_playback.
+
+	* src/provider/sleep.py: New module.
 
 	* src/ttsapi/server.py (TCPConnection._report_error): Accept
 	also TTSAPIError.
