@@ -71,6 +71,10 @@ class FestivalConnection(object):
         self.command("speechd-set-voice", "male1")
         self.command("speechd-set-language", "en")
         
+    def close(self):
+        self._festival_socket.shutdown(1)
+        self._festival_socket.close()
+        
         
     def _send(self, data):
         # Send data to socket
@@ -253,13 +257,19 @@ class Core(driver.Core):
     def init(self):
         """Initialize Festival core, connect to Festival server and prepare for speaking"""
         festival.open(host=conf.server_host, port=conf.server_port)
-    
+
+    def quit(self):
+        """Terminate connection to festival and quit"""
+        driver.log.info("Closing connection to Festival")
+        festival.close()
+        super(Core, self).quit()
+
     def drivers(self):
         """Report information about this driver"""
         return DriverDescription(
             driver_id = "festival",
             synthesizer_name = "Festival Speech Synthesizer",
-            driver_version = "0.0",
+            driver_version = "0.1",
             synthesizer_version = None
             )
     
@@ -300,7 +310,7 @@ class Core(driver.Core):
             rate_settings = ['relative'],
             pitch_settings = ['relative'],
             punctuation_modes = ['all', 'none', 'some'],
-            can_set_punctuation_detail = True,
+            can_set_punctuation_detail = False,
             capital_letters_modes = ['no', 'spelling', 'icon'],
             can_say_char = True,
             can_say_key = True,
@@ -545,6 +555,7 @@ class Controller(driver.Controller):
                 event_list.append(AudioEvent(type='message_end', pos_text = 0,
                                              pos_audio = float(total_samples)/sample_rate*1000))
 
+            
             # Sending datablock to retrieval socket
             retrieval_socket.send_data_block(
                 msg_id = message_id, block_number = block_number,
