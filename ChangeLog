@@ -1,5 +1,11 @@
 2007-10-12  Hynek Hanke  <hanke@syrr.buchal.name>
 
+	* src/provider/driver.py (Core.register_callback): New function.
+
+2007-10-12  Hynek Hanke  <hanke@syrr.buchal.name>
+	
+	* src/provider/sd_module.py: New file.
+
 	* src/ttsapi/structures.py (Structure.__init__): Default
 	value is now being copied, not assigned, to each new
 	structure.
