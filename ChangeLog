@@ -1,3 +1,26 @@
+2007-10-17  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/provider/drivers/driver.py: Moved from src/provider.
+
+	* src/provider/drivers/festival.py: Moved from src/provider.
+
+	* src/provider/drivers/sd_module.py: Moved from src/provider.
+
+	* src/provider/driver.py: Moved to src/provider/drivers/driver.py
+
+	* src/provider/sd_module.py: Moved to src/provider/drivers/
+
+	* src/provider/festival.py: Moved to src/provider/drivers/
+	
+	* src/provider/configuration.py: Drivers moved to drivers/
+
+	* doc/tts-api-provider.texi
+	(Device Driver Implementation): New section.
+
+2007-10-15  Hynek Hanke  <hanke@homer.brailcom.xx>
+
+	* src/provider/festival.py (Core.__init__): Call super init()
+
 2007-10-12  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* doc/tts-api-provider.texi: @function -> @code, @textit -> @code
