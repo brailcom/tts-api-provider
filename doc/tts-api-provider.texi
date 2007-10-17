@@ -60,6 +60,7 @@ General Public License''
 * Introduction::                
 * Design::                      
 * Server Implementation::       
+* Device Driver Implementation::  
 * TTS API Implementations::     
 @end menu
 
@@ -277,8 +278,8 @@ synthesizer APIs easier
 @heading Implementation
 @itemize @w{}
 @item @emph{License}: GNU LGPL
-@item @emph{Language}: C (maybe also Python bindings or Python version)
-@item @emph{Dependencies}: libc, ?
+@item @emph{Language}: Python, C
+@item @emph{Dependencies}: python, glibc
 @end itemize
 
 @node Convenience Libraries for Applications,  , Driver Template Library, Design
@@ -299,7 +300,7 @@ care of	IPC communication
 @item @emph{Dependencies}: libc, Python
 @end itemize
 
-@node Server Implementation, TTS API Implementations, Design, Top
+@node Server Implementation, Device Driver Implementation, Design, Top
 @chapter Server Implementation
 
 This chapter roughly describes the implementation of TTS API provider,
@@ -313,7 +314,6 @@ abundant comments in the source code itself.
 @menu
 * TTS API Provider Core (implementation)::  
 * Audio Subsystem (implementation)::  
-* Python Device Driver Template (implementation)::  
 @end menu
 
 @node TTS API Provider Core (implementation), Audio Subsystem (implementation), Server Implementation, Server Implementation
@@ -432,16 +432,272 @@ identification and tell it to expect new audio data in its audio data bin.
 Also request for playback must be sent whenever necessary. Please see the
 method @code{provider._prepare_for_message} in @file{src/provider.py}.
 
-@node Audio Subsystem (implementation), Python Device Driver Template (implementation), TTS API Provider Core (implementation), Server Implementation
+@node Audio Subsystem (implementation),  , TTS API Provider Core (implementation), Server Implementation
 @section Audio Subsystem (implementation)
 
 
+@node Device Driver Implementation, TTS API Implementations, Server Implementation, Top
+@chapter Device Driver Implementation
 
-@node Python Device Driver Template (implementation),  , Audio Subsystem (implementation), Server Implementation
-@section Python Device Driver Template (implementation)
+Device drivers are implemented as separate processes that are being
+launched by the TTS API Provider Core. All communication between the
+core and the drivers happens through the text protocol TTS API via pipes
+(stdin, stdout and stderr of the said process). As such, drivers can be
+implemented in any programming language as long as they conform to the
+prescribed interface. 
+
+We provide libraries for Python and C which make implementation of the
+device drivers quite simple by handling the questions of communication,
+logging and internal structure (such as threading) automatically. Their
+use is recommended for ease and consistency, programmers are however
+free to implement their device drivers in a different way or in
+a different programming language.
+
+@menu
+* Driver Interface::            
+* Drivers in Python::           
+* Drivers in C::                
+@end menu
+
+@node Driver Interface, Drivers in Python, Device Driver Implementation, Device Driver Implementation
+@section Driver Interface
+
+The drivers communicate using the standard TTS API implemented as a text
+protocol, with a few exceptions listed bellow. Input/output happens on
+standard input and standard output of the device driver process. All
+logging messages should be written in the selected level of verbosity
+to the standard error output.
+
+Differencies from the standard TTS API:
+@itemize 
+@item INIT
+The very first command sent to the driver process must be the
+@code{INIT} command. On receiving this command, the device driver should
+initialize itself (connect to the synthesizer, test if the connection is
+working etc.) and report success or error together with a reason for the
+error in a human readable form.
+
+If the driver reports an error during initialization, the provider
+core is responsible for sending the QUIT command subsequently and
+thus terminating the driver process.
+
+It is an error to call any other TTS API command before @code{INIT} or
+to call @code{INIT} more than once.
+
+Example with successful initialization:
+@example
+INIT
+200 OK INITIALIZED SUCCESFULLY
+@end example
+
+Example with error during initialization:
+@example
+INIT
+304-"Festival driver not loaded, server not running."
+304 DRIVER NOT LOADED
+QUIT
+@end example
+
+@item LIST DRIVERS
+This command provides only one entry in its reply which is corresponding
+to the name and version of the synthesizer handled by this driver.
+
+@item SET DRIVER
+This command is not used. Attempts to call it should result in an
+@code{INVALID COMMAND} error reply.
+
+@item HELP
+This command is not used by the Provider. If is up to the driver
+author whether he implements it.
+
+@end itemize
+
+@node Drivers in Python, Drivers in C, Driver Interface, Device Driver Implementation
+@section Drivers in Python
+
+A convenience library and a prepared skelton for developing Python
+device drivers can be found in
+@file{tts-api-provider/src/provider/driver.py}. This file is basically a
+full implementation of a driver that does nothing :)
+
+@menu
+* Driver Design (Python)::      
+* Driver skeleton (Python)::    
+* Core (Python)::               
+* Controller (Python)::         
+* RetrievalSocket (Python)::    
+* Other tools::                 
+@end menu
+
+@node Driver Design (Python), Driver skeleton (Python), Drivers in Python, Drivers in Python
+@subsection Driver Design (Python)
+
+There are two possible ways how to create a device driver:
+
+@itemize
+@item Bottom-up: By overriding some methods of the provided classes that should
+contain code specific for your drivers while using the provided
+skeleton.
+@item Top-Down: By creating your own skeleton of the driver process while
+using some of the provided classes for some of the tasks that
+you need to accomplish.
+@end itemize
+
+Unless your driver is very specific, we recommend using the bottom-up
+approach, which should be considerably easier to implement.
+
+@node Driver skeleton (Python), Core (Python), Driver Design (Python), Drivers in Python
+@subsection Driver skeleton (Python)
+
+To use the provided driver skeleton, create a new script which calls the
+method @code{driver.main_loop(DriverCore, DriverController)} where
+@code{DriverCore} and @code{DriverController} are instances of classes
+defining the driver functionality. Normally they are derived from the
+base classes @code{driver.Core} and @code{driver.Controller} and
+reimplement only those methods specific to the driver in question. For
+that reason, if you consider writing a device driver in Python, you are
+very much encouraged to study the contents of
+@file{src/provider/driver.py} carefully.
+
+Basically, @code{DriverCore} is the main ,,provider'' object which
+implements all the TTS API functionality methods, like
+@code{Core.set_rate}, @code{Core.say_text} or @code{Core.say_key}. Some
+of the methods like @code{Core.say_text}, @code{Core.say_key} or
+@code{Core.cancel} are by default pre-programmed so that they accept the
+request only, pass it for processing to the appropriate
+@code{DriverController} method which runs in a separate thread, and
+return. While the @code{DriverCore} methods must be non-blocking
+(i.e. @code{SAY TEXT} must return immediatelly as per definition of TTS
+API), there is no such restriction on the @code{DriverController}
+methods, which are launched in a separate thread, and can run during the
+whole time of the synthesis and/or audio playback of the requested
+message.
+
+It is enough for a programmer to override the
+@code{driver.Core.say_text()} method if he doesn't need the asynchronous
+functionality of the @code{driver.Controller} object. If the synthesizer
+is blocking however, the driver programmer can make advantage of the
+provided mechanism by overriding the @code{driver.Controller.say_text()}
+method instead without having to create his own threads and locks for
+that purpose.
+
+@node Core (Python), Controller (Python), Driver skeleton (Python), Drivers in Python
+@subsection Core (Python)
+
+The @code{Core} object provides the main functionality of the driver.
+It implements all driver TTS API methods. Every method has a set of
+parameters and a return value as defined in TTS API and documented in
+@file{src/provider/driver.py}. If not overriden, most of these methods
+raise the @code{ttsapi.error.ErrorNotSupportedByDriver} exception.
+
+@enumerate
+@item 
+It is not necessary to implement all the methods, the driver author must
+however allways make sure that the state of implementation of the
+@code{DriverCore} methods is consistent with the capabilities list
+returned by the @code{DriverCore.capabilities()} method.
+
+Notes:
+@item
+It is necessary to run @code{super(Core, self).init()} and
+@code{super(Core, self).quit()} at the end of your own code if you
+override the @code{Core.init} or @code{Core.quit} methods so that the
+@code{DriverController} thread is handled correctly.
+@end enumerate
+
+Please see inline documentation in @file{src/provider/driver.py} for
+more information about the class and its methods and
+@file{src/provider/festival.py} for an example.
 
 
-@node TTS API Implementations,  , Server Implementation, Top
+@node Controller (Python), RetrievalSocket (Python), Core (Python), Drivers in Python
+@subsection Controller (Python)
+
+The controller object contains the following TTS API methods:
+
+@itemize
+@item say_text
+@item say_key
+@item say_char
+@item say_icon
+@item cancel
+@item defer
+@item discard
+@end itemize
+
+Instead of overriding these methods in @code{DriverCore}, they can be
+overriden in the @code{DriverController} object. The methods in this
+later object are called one after each other in a lateral thread.  The
+execution mechanism is implemented in the @code{run} method which we
+recommend to study as well.
+
+The parameters and return values of the @code{DriverController} TTS API
+methods are exactly the same as those for the @code{DriverCore} methods.
+
+Please note that if you redefine the primary @code{DriverCore} method,
+e.g. @code{say_text}, without calling the @code{super} method of the
+parent, the appropriate @code{DriverController} method will never get
+called. It is thus allways only reasonable to redefine one of those
+two methods.
+
+Example: A very common case will be the @code{say_text} method
+implemented in the @code{DriverController} object while the
+@code{cancel} method is implemented in the @code{DriverCore} object.
+This way, the @code{say_text} method can be blocking (in the lateral
+thread) during the whole time of synthesis playback, while the
+@code{cancel} method in the @code{DriverCore} object in the main thread
+can still be called to stop the 'blocking' synthesis code.
+
+Please see inline documentation in @file{src/provider/driver.py} for
+more information about the class and its methods and
+@file{src/provider/festival.py} for an example.
+
+@node RetrievalSocket (Python), Other tools, Controller (Python), Drivers in Python
+@subsection RetrievalSocket (Python)
+
+The @code{RetrievalSocket} class allows the module to open an audio
+retrieval socket connection (as defined by TTS API) to the given host
+and port and send blocks of audio data via the @code{send_data_block}
+method.
+
+Drivers that support the 'retrieval' method of audio output but the
+underlaying synthesizer doesn't support it, must retrieve the data
+from the synthesizer via the offered mechanism and send them to their
+desired destination via the TTS API retrieval socket. Creating an
+object of the @code{RetrievalSocket} class is the prefered way
+to accomplish the task.
+
+Please see inline documentation in @file{src/provider/driver.py} for
+more information about the class and its methods and
+@file{src/provider/festival.py} for an example.
+
+@node Other tools,  , RetrievalSocket (Python), Drivers in Python
+@subsection Other tools (Python)
+
+@itemize
+@item
+The @code{main_loop} function creates a global logger (with output to
+stderr as defined by the Driver guidelines). You can access it via
+@code{driver.log.}. For example @code{driver.log.debug(``Hello world'')}
+
+@item 
+The @code{main_loop} registers its own callback via
+@code{DriverCore.register_callback()} which reports all events via the
+standardiz TTS API text protocol mechanism. If your driver implements
+the playback method (handles playback itself instead of retrieving the
+audio data), you should implement the @code{register_callback()} method
+so that your provider registers the correct callback reporting function
+at start. Your implementation of @code{DriverCore} is then responsible
+to call this callback function on receiving every callback/event.
+@end itemize
+
+@node Drivers in C,  , Drivers in Python, Device Driver Implementation
+@section Drivers in C
+
+The C library and driver skeleton have not been implemented yet, they
+are planned for very near future however.
+
+@node TTS API Implementations,  , Device Driver Implementation, Top
 @chapter TTS API Implementations
 
 @menu
