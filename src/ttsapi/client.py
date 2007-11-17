@@ -1,7 +1,7 @@
 #
 # tts-api.py - Python implementation of TTS API
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.11 2007-10-12 08:11:31 hanke Exp $
+# $Id: client.py,v 1.12 2007-11-17 21:12:11 pdm Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -193,7 +193,7 @@ d    available from
         position -- a positive value indicating the position
         of character where synthesis should start          
         """
-        assert isinstance(text, str)
+        assert isinstance(text, basestring), ('Invalid input type', type(text),)
         assert format in ('plain', 'ssml')
         assert position == None or isinstance(position, int)
         assert position_type in (None, 'message_begin', 'sentence_start',

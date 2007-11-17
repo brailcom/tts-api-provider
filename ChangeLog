@@ -1,3 +1,8 @@
+2007-11-17  Milan Zamazal  <pdm@brailcom.org>
+
+	* src/ttsapi/client.py (TCPConnection.say_text): Accept basestring
+	as the `text' argument.
+
 2007-10-17  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* src/provider/drivers/driver.py: Moved from src/provider.
