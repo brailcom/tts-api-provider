@@ -1,7 +1,7 @@
 #
 # logs.py - Logging
 #   
-# Copyright (C) 2006 Brailcom, o.p.s.
+# Copyright (C) 2006, 2007 Brailcom, o.p.s.
 # 
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: logs.py,v 1.3 2007-06-16 18:02:09 hanke Exp $
+# $Id: logs.py,v 1.4 2007-11-17 21:12:21 pdm Exp $
 
 import logging
 import sys
@@ -49,10 +49,12 @@ class Logging(logging.Logger):
         # TODO: First write to log file all the information gathered at stage 1
 
         # Save reference to the configuration object for later use
-        if not conf.log_on_stdout:
-            self.removeHandler(self.stdout_handler)
-        self.file_handler = logging.FileHandler(conf.log_path)
         formatter = logging.Formatter(conf.log_format)
-        self.file_handler.setFormatter(formatter)
-        self.addHandler(self.file_handler)
+        if conf.log_on_stdout:
+            self.stdout_handler.setFormatter(formatter)
+        else:
+            self.removeHandler(self.stdout_handler)
+            self.file_handler = logging.FileHandler(conf.log_path)
+            self.file_handler.setFormatter(formatter)
+            self.addHandler(self.file_handler)
         self.setLevel(conf.log_level)

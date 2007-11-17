@@ -1,5 +1,10 @@
 2007-11-17  Milan Zamazal  <pdm@brailcom.org>
 
+	* src/provider/logs.py (Logging.init_stage2): Don't create file
+	logger when logging to stdout.
+
+2007-11-17  Milan Zamazal  <pdm@brailcom.org>
+
 	* src/ttsapi/client.py (TCPConnection.say_text): Accept basestring
 	as the `text' argument.
 
