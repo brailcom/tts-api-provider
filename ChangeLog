@@ -1,5 +1,11 @@
 2007-11-21  Hynek Hanke  <hanke@syrr.buchal.name>
 
+	* src/provider/provider.py (Provider.__init__): If a module
+	could not be loaded, report the error in logfile and continue
+	with others.
+
+2007-11-21  Hynek Hanke  <hanke@syrr.buchal.name>
+	
 	* src/ttsapi/server.py (TCPConnection._report_error): Additional
 	debugging, correct concatenation of error.data into err_detail.
 
