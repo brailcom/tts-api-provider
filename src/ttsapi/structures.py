@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: structures.py,v 1.7 2007-10-12 08:10:54 hanke Exp $
+# $Id: structures.py,v 1.8 2007-11-21 12:50:04 hanke Exp $
 
 from copy import copy
 
@@ -129,7 +129,7 @@ class DriverCapabilities(Structure):
         # Defering messages
         ('can_defer_message', "", False),
         # SSML Support
-        ('can_parse_ssml', "", False),        
+        ('message_format', "", []),        
         # Multilingual utterences
         ('supports_multilingual_utterances', "", False)
     )
