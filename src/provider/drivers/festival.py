@@ -126,7 +126,6 @@ class FestivalConnection(object):
         self._com_buffer = self._com_buffer[3:]
 
         driver.log.debug("Received identifier "+identifier)
-        driver.log.debug("Whole buffer |"+self._com_buffer+"|")
 
         if (identifier == 'ER\n'):
             raise FestivalReplyError;
@@ -318,8 +317,8 @@ class Core(driver.Core):
             audio_methods = ['retrieval'],
             events = 'message',
             performance_level = 'good',
-            can_parse_ssml = True,
-            supports_multilingual_utterances = False
+            message_format = ['ssml'],
+            supports_multilingual_utterances = False,
            )
            
     def set_voice_by_name(self, voice_name):
