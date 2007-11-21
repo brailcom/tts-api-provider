@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.12 2007-11-21 12:42:07 hanke Exp $
+# $Id: provider.py,v 1.13 2007-11-21 13:38:12 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -82,9 +82,16 @@ class Provider(object):
 
             id = random.randrange(1,10000,1)
             logfile = open(conf.log_dir+name+"-"+str(id)+".log", "w")
-            process = subprocess.Popen(args=[executable]+args,
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logfile)
-                # bufsize = 1 means line buffered
+            try:
+                process = subprocess.Popen(args=[executable]+args,
+                                           stdin=subprocess.PIPE,
+                                           stdout=subprocess.PIPE,
+                                           stderr=logfile)
+
+            except OSError:
+                log.error("Can't launch driver  "+ name);
+                continue;
+            # bufsize = 1 means line buffered
             log.debug("Subprocess for driver" + name + "initalized")
             self.loaded_drivers[name] = Driver(process=process, name=name,
                 com = ttsapi.client.TCPConnection(method = 'pipe',
