@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: driver.py,v 1.1 2007-10-17 08:35:41 hanke Exp $
+# $Id: driver.py,v 1.2 2007-11-21 12:42:40 hanke Exp $
  
 """TTS API driver logic"""
 
@@ -168,8 +168,8 @@ class Core(object):
     def quit(self):
         """Terminate the driver"""
         log.info("Terminating");
+
         ctrl_thread_requests.push(CtrlRequest(type='quit'))
-        
         log.debug("Joining controller thread");
         self.controller.join()
         log.debug("End of quit in core");
@@ -722,5 +722,5 @@ def main_loop(Core, Controller):
             driver_comm.process_input()
         except ttsapi.server.ClientGone:
             log.info("Client gone, terminating")
-            return
-
+            return;
+    
