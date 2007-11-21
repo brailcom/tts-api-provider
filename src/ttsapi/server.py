@@ -33,6 +33,7 @@ class TCPConnection(object):
     """TTS API on server side"""
 
     def _quit(self):
+        self.logger.debug("Quitting in TCPConnection");
         self.provider.quit()
         try:
             self.conn.close()
@@ -398,7 +399,7 @@ class TCPConnection(object):
         if isinstance(error, TTSAPIError):
             err_code = error.code
             err_reply = error.msg
-            err_detail = "Error data: " + error.data
+            err_detail = "Error data: " + str(error.data)
         elif error in self.errors_map:
             entry = self.errors_map[error]
             err_code = entry[0]
