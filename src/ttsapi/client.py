@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.12 2007-11-17 21:12:11 pdm Exp $
+# $Id: client.py,v 1.13 2007-11-21 12:53:19 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -129,9 +129,9 @@ d    available from
 
         for capability in raw:
             if (len(capability) < 2):
-                raise TTSAPIError("Malformed driver capability")
+                raise TTSAPIError("Malformed driver capability: " + str(capability))
             if not result.__dict__.has_key(capability[0]):
-                raise TTSAPIError("Unknown capability reported by driver")
+                raise TTSAPIError("Unknown capability " + capability[0] + " reported by driver")
 
             entry = capability[0]
 
@@ -577,7 +577,7 @@ d    available from
                 event.pos_text = int(line[2])
             if line[4] != 'None':
                 event.pos_audio = int(line[3])
-        elif type == 'index_mark':
+        elif event.type == 'index_mark':
             name = line[1].strip('"')
             if line[2] != 'None':
                 event.pos_text = int(line[1])
