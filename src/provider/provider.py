@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.11 2007-10-12 08:11:48 hanke Exp $
+# $Id: provider.py,v 1.12 2007-11-21 12:42:07 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -264,13 +264,21 @@ class Provider(object):
         self.current_driver.com.set_message_id(message_id)
         self._prepare_for_message(message_id)
 
-        # TODO: This will be handled by loadable modules
-        # in the future
         # TODO: Escape '<' and '>'
         # Plain text emulation
-        if format == 'plain':
-            text = "<speak>" + text + "</speak>"
-            format = 'ssml'
+        cap_message_format = self.current_driver.real_capabilities.message_format
+        if format not in cap_message_format:
+            if (format == 'plain') and ('ssml' in cap_message_format):
+                log.debug("Converting from PLAIN to SSML")                
+                text = "<speak>" + text + "</speak>"
+                format = 'ssml'
+            elif (format == 'ssml') and ('plain' in cap_message_format):
+                log.debug("Converting from SSML to PLAIN")                
+                # TODO: text = strip_ssml(text)
+                format = 'plain'
+            else:
+                raise "Format not supported in driver or invalid format. Requested: " + str(format) + \
+                    " Offered: " + str(cap_message_format)
 
         self.current_driver.com.say_text(text, format, position, position_type,
                                          index_mark, character)
