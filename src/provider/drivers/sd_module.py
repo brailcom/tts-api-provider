@@ -19,7 +19,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: sd_module.py,v 1.1 2007-10-17 08:35:57 hanke Exp $
+# $Id: sd_module.py,v 1.2 2007-11-21 12:57:24 hanke Exp $
 
 """Interface to Speech Dispatcher modules"""
 
@@ -35,8 +35,6 @@ import driver
 
 from ttsapi.structures import *
 from ttsapi.errors import *
-
-
 
 class SSIPError(Exception):
     """Common base class for exceptions during SSIP communication."""
@@ -495,7 +493,7 @@ class Core(driver.Core):
            audio_methods = ['playback'],
             events = 'message',
             performance_level = 'good',
-            can_parse_ssml = True,
+            message_format = ['ssml'],
             supports_multilingual_utterances = False
            )
            
