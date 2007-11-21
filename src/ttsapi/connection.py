@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.12 2007-10-12 08:11:25 hanke Exp $
+# $Id: connection.py,v 1.13 2007-11-21 12:52:43 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -151,8 +151,9 @@ class Connection(object):
         c = None
         while True:
             line = self._read_line()
-            assert len(line) >= 4, "Malformed data received from server:" + line
-            code, sep, text = line[:3], line[3], line[4:]
+            assert len(line) > 0
+            assert len(line) >= 4, "Malformed data received from server: |" + line + "|"
+            code, sep, text = line[:3], line[3], line[4:].rstrip(self.NEWLINE)
             assert code.isalnum() and (c is None or code == c) and \
                    sep in ('-', ' '), "Malformed data received from server:"  + line
             if sep == ' ':
@@ -264,11 +265,10 @@ class Connection(object):
         self.logger.debug("receive_line: received" + str(data))
         
         if not self._data_transfer:
-            # TODO: Doublequotes
-            
-            return data.split(' ')
+            # TODO: Doublequotes            
+            return data.rstrip(self.NEWLINE).split(' ')
         else:
-            if data == '.':
+            if (data == '.'+self.NEWLINE) or (data == '.'):
                 _server_side_buf = self._server_side_buf.rstrip(self.NEWLINE)
                 return ['.']
             elif data[:2] == '..':
@@ -356,14 +356,17 @@ class SocketConnection(Connection):
             res = self._socket.recv(1024)
             # WARNING: I don't know if this is correct, python library
             # documentation is unclear here, but it seems to work
-            if res == "":
+            if len(res) == 0:
                 raise IOError
             self._buffer += res
             pointer = self._buffer.find(self.NEWLINE)
-        line = self._buffer[:pointer]
+        assert pointer >= 0
+        line = self._buffer[:(pointer+len(self.NEWLINE))]
         self._buffer = self._buffer[pointer+len(self.NEWLINE):]
         if self.logger:
-            self.logger.debug("Received over socket: %s",  line)
+            self.logger.debug("Received over socket: |%s|",  line)
+
+        assert len(line) > 0
         return line
 
     def read_data(self, bytes):
@@ -421,6 +424,7 @@ class SocketConnection(Connection):
         """Close the connection."""
         try:
             socket_.socket.shutdown(self._socket, os.O_RDWR)
+            socket_.socket.close(self._socket)
         except:
             self.logger.debug("Can't shutdown socket")
             raise IOError
@@ -450,15 +454,22 @@ class PipeConnection(Connection):
         
         Read from the socket until the newline delimeter (given by the
         `NEWLINE' constant).  Blocks until the delimiter is read.
-        
         """
-        
-        line = self.pipe_in.readline().rstrip(self.NEWLINE)
-        if self.logger:
-            self.logger.debug("Received over pipe: %s",  line)
+
+        try:
+            line = self.pipe_in.readline()
+        except:
+            self.logger.error("Exception in data reading!");
+            raise IOError
 
         if len(line) == 0:
+            self.logger.debug("Connection over pipe broken")
             raise IOError
+
+        if self.logger:
+            self.logger.debug("Received over pipe: |%s|",  line)
+            
+        assert len(line) > 0
             
         return line
         
