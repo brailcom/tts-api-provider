@@ -1,3 +1,51 @@
+2007-11-21  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/ttsapi/server.py (TCPConnection._report_error): Additional
+	debugging, correct concatenation of error.data into err_detail.
+
+	* src/ttsapi/structures.py (DriverCapabilities): can_parse_ssml ->
+	message_format
+
+	* src/provider/drivers/c/espeak.c: New file -- eSpeak driver.
+	
+	* src/provider/drivers/c/Makefile: New file.
+
+	* src/provider/drivers/c/ttsapi.c: New file TTS API C driver skeleton.
+
+	* src/provider/drivers/c/ttsapi.h: New file.
+	
+	* src/provider/drivers/driver.py (Core): Formatting.
+
+	* src/provider/provider.py (Provider.say_text): Emulate plain from
+	SSML and SSML from plain.
+
+	* src/ttsapi/connection.py (PipeConnection._read_line): Removed
+	IOError on empty line read.
+	(SocketConnection.close): Close the socket after shutdown.
+	(PipeConnection._read_line): Do not strip trailing newline.
+	(Connection.receive_line): Strip trailing newline here.
+	(Connection._recv_message): Strip trailing newline on client side
+	as well.
+	(PipeConnection._read_line): Raise IOError on all data reading errors.
+
+	* src/ttsapi/connection.py (PipeConnection._read_line): IOError on
+	empty message receival is back.
+
+	* src/provider/audio.py (event_list): Now protected with event_list_lock.
+	(Audio.play): Interrupt event_sleeper.
+
+	* src/ttsapi/client.py (TCPConnection.raise_event): Typo.
+
+	* src/ttsapi/connection.py (PipeConnection._read_line): Do not raise IOError
+	if received empty line.
+
+	* src/provider/drivers/sd_module.py: can_parse_ssml -> message_format
+	(_SSIP_Connection._readline): Removed raising error if received only
+	0 bytes on a line (which is ok if the line is empty...).
+
+	* src/provider/drivers/festival.py: can_parse_ssml -> message_format
+
+
 2007-11-17  Milan Zamazal  <pdm@brailcom.org>
 
 	* src/provider/logs.py (Logging.init_stage2): Don't create file
@@ -87,7 +135,7 @@
 	data is waiting in the _buffer than what we need.
 
 	* src/provider/driver.py (Controller.run): Added new event 'quit'
-
+o
 	* src/ttsapi/server.py (TCPConnection.process_input): Do not report
 	error back to socket if reply is None.
 	(TCPConnection.process_input): Pass ClientGone up.
