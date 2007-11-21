@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.7 2007-10-12 08:17:04 hanke Exp $
+# $Id: audio.py,v 1.8 2007-11-21 12:39:19 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -70,6 +70,9 @@ class PlaybackInfo(object):
 messages_in_playback = {}
 messages_in_playback_lock = thread.allocate_lock()
 
+# List of events to dispatche
+event_list = {}
+event_list_lock = thread.allocate_lock()
 
 # --- AUDIO FUNCTIONALITY ---
 
@@ -109,7 +112,7 @@ class Audio(object):
         log.debug("Message " + str(message_id)  +" accepted for playback")
         messages_in_sources_sleeper.interrupt()        
 
-    def play(self, message_id):
+    def play(self, message_id, event_sleeper):
         """Start playback of the given message_id. Do nothing if it is
         already being played."""
 
@@ -128,6 +131,10 @@ class Audio(object):
             messages_in_playback[message_id].started = datetime.datetime.now()
         finally:
             messages_in_playback_lock.release()
+
+        # Interrupt events thread sleep so that it can recalculate
+        # position of pending events for this message
+        event_sleeper.interrupt()
         log.debug("Source for message " + str(message_id)  +" playing")
     
     def stop(self, message_id):
@@ -190,7 +197,7 @@ class Audio(object):
             log.error("Can't set volume. Received exception: " + str(e))
 
     def add_data(self, message_id, data, format, sample_rate,
-                 channels, encoding):
+                 channels, encoding, event_sleeper):
         """Add new data to track assigned to message_id with the
         given format, sample_rate, number of channels and encoding.
         Currently only handles raw PCM."""
@@ -231,7 +238,7 @@ class Audio(object):
             # the fact that only already processed buffers are unqueued with the
             # Source.unqueue_buffers method
             source.unqueue_buffers(256)
-            self.play(message_id)
+            self.play(message_id, event_sleeper)
 
 
 # --- AUDIO SERVER IMPLEMENTATION ---
@@ -241,14 +248,12 @@ def init(logger):
     global audio_ctrl_request
     global audio_events
     global conf, log
-    global event_list
 
     log = logger
     conf = Configuration(logger=log)
 
     # Setup audio_ctrl_request for communication
     # of the audio subsystem with outside world
-    event_list = {}
     audio_ctrl_request = event.EventQueue()
     audio_events = event.EventQueue()
 
@@ -319,8 +324,8 @@ def receive_data(socket, event_sleeper):
     # EVENTS SECTION
     event_header = socket.receive_line()
     event_lines = []
-    global event_list
 
+    event_list_lock.acquire()
     if not event_list.has_key(msg_id):
         event_list[msg_id] = []
     if event_header == ['EVENTS']:
@@ -359,6 +364,7 @@ def receive_data(socket, event_sleeper):
         data_header = socket.receive_line()
     else:
         data_header = event_header
+    event_list_lock.release()
 
     # DATA SECTION
     if data_header != ['DATA']:
@@ -377,7 +383,7 @@ def receive_data(socket, event_sleeper):
     
     # Block of data read, add data to audio
     log.debug("OK data received, sending to audio")
-    audio.add_data(msg_id, audio_data, "raw", sample_rate, 1, "S16_LE")
+    audio.add_data(msg_id, audio_data, "raw", sample_rate, 1, "S16_LE", event_sleeper)
     
 def connection_handling(event_sleeper):
     """Handle incomming connections and read data into buffers
@@ -457,8 +463,9 @@ def events(sleeper):
 
         
         messages_in_playback_lock.acquire()
-
+        event_list_lock.acquire()
         for id, message in messages_in_playback.iteritems():
+            log.debug("Checking events for message id " + str(id))
             state = message.source.get_state()
             #TODO: Possible race with message.started
             if message.started != None:
@@ -488,8 +495,8 @@ def events(sleeper):
                         event.dispatched=True
                     elif ms < min:
                         min = ms
-
         messages_in_playback_lock.release()
+        event_list_lock.release()
 
         # Sleep as long as we can, but not less than 5 miliseconds.
         if min > 5:
@@ -497,7 +504,7 @@ def events(sleeper):
             # events are added to the event_list, so that
             # the sleeping time can be recalculated
             log.debug("Sleeping " + str(min) +" ms")
-            sleeper.sleep(min/1000.0)
+            sleeper.sleep(min/1000.0)        
         else:
             log.debug("Sleeping 5ms")
             sleeper.sleep(0.005)
