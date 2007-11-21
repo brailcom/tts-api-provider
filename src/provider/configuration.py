@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: configuration.py,v 1.6 2007-10-17 08:34:23 hanke Exp $
+# $Id: configuration.py,v 1.7 2007-11-21 12:39:47 hanke Exp $
 
 import logging
 import os
@@ -140,7 +140,10 @@ class Configuration(object):
                 'descr': "List of driver names and their executables",
                 'doc': None,
                 'type': object,
-                'default': [('festival',
+                'default': [('espeak',
+                             os.path.join (os.path.dirname (__file__), 'drivers/c/espeak'),                          
+                             ),
+                            ('festival',
                              os.path.join (os.path.dirname (__file__), 'drivers/festival.py'),                             
                              ),
                             ('sd_espeak',
@@ -160,7 +163,7 @@ class Configuration(object):
                              ["Flite",
                               "/usr/lib/speech-dispatcher-modules/sd_flite",
                               "/etc/speech-dispatcher/modules/flite.conf"]
-                             ),
+                             )
                             ]
             },
         'default_driver':
