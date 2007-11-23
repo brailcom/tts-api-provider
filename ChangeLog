@@ -1,3 +1,13 @@
+2007-11-23  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/provider/provider.py (Provider.__init__): Use
+	os.path.join instead of string concatenation to construct
+	path to module logs.
+
+	* src/provider/configuration.py (Configuration.__init__): Use
+	os.path.join instead of string concatenation to construct
+	log_path
+
 2007-11-21  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* src/provider/provider.py (Provider.__init__): If a module
