@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: configuration.py,v 1.7 2007-11-21 12:39:47 hanke Exp $
+# $Id: configuration.py,v 1.8 2007-11-23 09:20:59 hanke Exp $
 
 import logging
 import os
@@ -230,4 +230,4 @@ class Configuration(object):
         #if len(args) != 0:
            # raise "This command takes no positional arguments (without - or -- prefix)"
 
-        self.log_path = self.log_dir + self.log_name
+        self.log_path = os.path.join(self.log_dir, self.log_name)
