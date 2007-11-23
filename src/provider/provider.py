@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.13 2007-11-21 13:38:12 hanke Exp $
+# $Id: provider.py,v 1.14 2007-11-23 09:22:38 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -26,6 +26,7 @@ import sys
 import subprocess
 from copy import copy
 import random
+import os
 
 from ttsapi.structures import *
 from ttsapi.errors import *
@@ -80,8 +81,17 @@ class Provider(object):
             else:
                 raise "Invalid number of output module parameters"
 
+            # TODO: Create log files based on PID
+            # Currently, it is necessary to compare the log
+            # times
             id = random.randrange(1,10000,1)
+            logfile = open(os.path.join(conf.log_dir,
+                                        name+"-"+str(id)+".log"), "w")
+            process = subprocess.Popen(args=[executable]+args,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logfile)
+                # bufsize = 1 means line buffered
             logfile = open(conf.log_dir+name+"-"+str(id)+".log", "w")
+
             try:
                 process = subprocess.Popen(args=[executable]+args,
                                            stdin=subprocess.PIPE,
