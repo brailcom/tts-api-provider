@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.8 2007-11-21 12:39:19 hanke Exp $
+# $Id: audio.py,v 1.9 2007-12-19 13:16:03 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -46,6 +46,10 @@ from ttsapi.structures import AudioEvent
 from configuration import Configuration
 
 messages_in_sources_sleeper = sleep.Sleeper()
+
+events_thread = None
+playback_thread = None
+connection_handling_thread = None
 
 class MessageNotInPlayback(Exception):
     pass
@@ -79,7 +83,7 @@ event_list_lock = thread.allocate_lock()
 class CtrlRequest(event.Event):
     _attributes = {
         'type': ("Type of the event",
-            ("accept", "play", "stop", "discard")),
+            ("accept", "play", "stop", "discard", "quit")),
         'message_id': ("ID of the message",
                        ("accept", "play", "stop", "discard"))
     }
@@ -93,7 +97,12 @@ class Audio(object):
         """Initialize audio"""
         pyopenal.init()
         self.listener = pyopenal.Listener(44100)
-        
+
+    def close (self):
+        """Clean up, close devices etc."""
+        log.debug("Quit in PyOpenAL")
+        pyopenal.quit()
+
     def accept(self, message_id):
         """Accept a track for message_id. This function 
         initializes the necessary data structures and tells
@@ -248,6 +257,7 @@ def init(logger):
     global audio_ctrl_request
     global audio_events
     global conf, log
+    global events_thread, playback_thread, connection_handling_thread
 
     log = logger
     conf = Configuration(logger=log)
@@ -269,6 +279,8 @@ def init(logger):
     events_thread = threading.Thread(target=events,
                                      name="Audio-events",
                                      kwargs = {'sleeper' : event_sleeper})
+    events_thread.event_sleeper = event_sleeper
+    events_thread.termination_request = False
     events_thread.start()
 
     # Start connection handling thread
@@ -280,6 +292,26 @@ def init(logger):
     
     global audio
     audio = Audio()
+
+def quit():
+    """Cleanup and terminate main thread"""
+
+    log.info("Terminating playback thread");
+    events_thread.termination_request = True
+    events_thread.event_sleeper.interrupt()
+    events_thread.join()
+
+    log.info("Terminating events thread");
+    global audio_ctrl_request
+    audio_ctrl_request.push(CtrlRequest(type="quit"))
+    playback_thread.join()
+
+    log.info("Terminating connections thread");
+    connection_handling_thread.server_socket.shutdown(socket.SHUT_RDWR)
+    connection_handling_thread.server_socket.close()
+    connection_handling_thread.join()
+
+    log.info("Audio lateral threads terminated");
     
 def receive_data(socket, event_sleeper):
     """Receive a block of data as defined in TTS API
@@ -313,7 +345,7 @@ def receive_data(socket, event_sleeper):
             break
         if parameter_line[0] == 'data_length':
             data_length = int(parameter_line[1])
-            log.debug("Setting data lenght to " + str(data_length))
+            log.debug("Setting data length to " + str(data_length))
         if parameter_line[0] == 'sample_rate':
             sample_rate = int(parameter_line[1])
             log.debug("Setting sample rate to " + str(sample_rate))
@@ -397,23 +429,33 @@ def connection_handling(event_sleeper):
     server_socket.bind(("", conf.audio_port))
     server_socket.listen(conf.max_simultaneous_connections)
 
-    log.info("Waiting for audio connections")
+    threading.currentThread().server_socket = server_socket
 
     client_list = [server_socket,]
+    log.info("Waiting for audio connections, master socket= " +  str(server_socket))
     while True:
         log.debug("Waiting for activity")
         ready_to_read, ready_to_write, in_error = select.select(client_list, (), client_list)
         log.info("Socket activity: " + str(ready_to_read) + " " + str(ready_to_write) + " " \
                  + str(in_error))
         for sock in in_error:
-            if sock.fileno() == server_socket.fileno():
-                log.error("Master server audio socket in error, aborting.")
-                raise "Master server audio socket in error"
-            else:
-                log.info("Audio client on socket " + str(sock.fileno()) + " in error.")
-                client_list.remove(sock)        
+            try:
+                if sock.fileno() == server_socket.fileno():
+                    log.error("Master server audio socket closed, exiting.")
+                    sys.exit(0)
+                else:
+                    log.info("Audio client on socket " + str(sock.fileno()) + " in error.")
+                    client_list.remove(sock)        
+            except socket.error:
+                    log.error("Master server audio socket closed, exiting (socket err).")
+                    sys.exit(0)
 
         for sock in ready_to_read:
+            try:
+                test = sock.fileno()
+            except socket.error:
+                log.error("Master server audio socket closed, exiting.")
+                sys.exit(0)
             if sock.fileno() == server_socket.fileno():
                 (client_socket, address) = server_socket.accept()
                 log.info("Adding new audio client on socket " + str(client_socket.fileno()))
@@ -425,7 +467,7 @@ def connection_handling(event_sleeper):
                     receive_data(sock, event_sleeper)
                 except IOError:
                     log.info("Audio client on socket " + str(sock.fileno()) + " gone.")
-                    client_list.remove(sock)        
+                    client_list.remove(sock)
 
 def playback():
     """Listen for events and play tracks in a separate thread."""
@@ -433,7 +475,10 @@ def playback():
     while True:
         log.debug("Waiting for controll request")
         ev = audio_ctrl_request.pop()
-        log.debug("Received event " + ev.type +" "+ str(ev.message_id))
+        if ev.type != 'quit':
+            log.debug("Received event " + ev.type +" "+ str(ev.message_id))
+        else:
+            log.debug("Received event " + ev.type)
         
         if ev.type == 'accept':
             audio.accept(ev.message_id)
@@ -444,6 +489,12 @@ def playback():
             audio.stop(ev.message_id)
         elif ev.type == 'discard':
             audio.discard(ev.message_id)
+        elif ev.type == 'quit':
+            log.debug("Termination in playback thread")
+            # Close audio etc.
+            audio.close()
+            # Terminate this thread
+            sys.exit(0)
         else:
             raise "Unknown event"
 
@@ -461,6 +512,9 @@ def events(sleeper):
         NOT_ASSIGNED = 86000000
         min = NOT_ASSIGNED
 
+        if threading.currentThread().termination_request:
+            log.debug("Termination request in events thread");
+            sys.exit(0);
         
         messages_in_playback_lock.acquire()
         event_list_lock.acquire()
@@ -510,6 +564,10 @@ def events(sleeper):
             sleeper.sleep(0.005)
         
         #TODO: Calculate callback timing errors, check the performance
+
+def events_quit():
+    global audio_events
+    audio_events.push(AudioEvent(type="quit"))
 
 def post_event(type, message_id, blocking=False):
     """Post event to controll audio server"""
