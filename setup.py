@@ -2,7 +2,7 @@
 from distutils.core import setup
 setup(name='tts-api-provider',
       version='0.0',
-      packages=['tts-api-provider', 'ttsapi'],
+      packages=['provider', 'ttsapi'],
       description = "TTS API Provider",
       author = "Hynek Hanke, Brailcom o.p.s.",
       author_email = "hanke@brailcom.org",
