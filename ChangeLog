@@ -1,3 +1,39 @@
+2007-12-21  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/ttsapi/server.py (TCPConnection.close): New method.
+
+	* src/ttsapi/connection.py (SocketConnection._read_line): Raise
+	IOError on socket.error exception.
+
+	* setup.py: New file.
+	
+	* src/provider/drivers/c/ttsapi.h (driver_get_message_id): New
+	prototype.
+
+	* src/provider/drivers/c/ttsapi.c (_ttsapi_set_message_id): New function.
+	(driver_get_message_id): New function.
+	(driver_audio_connection_init): Open stream for writing.
+
+	* src/provider/drivers/c/espeak.c: Handle message_id and
+	block_num correctly.
+
+	* src/provider/drivers/driver.py (main_loop): Really exit
+
+	* src/provider/sleep.py (Sleeper.__del__): Ignore
+	exceptions on socket close.
+
+	* src/provider/server.py (cleanup): New function.
+	(sigint_signal_handler): New function.
+	(main): Call cleanup() on exit
+
+	* src/provider/audio.py: Thread objects are now global variables.
+	(CtrlRequest): New event: 'quit'
+
+2007-12-17  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* src/provider/provider.py (Provider.__init__): Removed duplicit starting
+	of driver processes.
+
 2007-11-23  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* src/provider/provider.py (Provider.__init__): Use
