@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.13 2007-11-21 12:52:43 hanke Exp $
+# $Id: connection.py,v 1.14 2007-12-21 15:00:19 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
@@ -261,7 +261,7 @@ class Connection(object):
         data -- the data including the trailing newline"""
 
         data = self._read_line()
-
+        
         self.logger.debug("receive_line: received" + str(data))
         
         if not self._data_transfer:
@@ -353,7 +353,10 @@ class SocketConnection(Connection):
         """
         pointer = self._buffer.find(self.NEWLINE)
         while pointer == -1:
-            res = self._socket.recv(1024)
+            try:
+                res = self._socket.recv(1024)
+            except socket_.error:
+                raise IOError
             # WARNING: I don't know if this is correct, python library
             # documentation is unclear here, but it seems to work
             if len(res) == 0:
