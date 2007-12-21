@@ -34,12 +34,10 @@ class TCPConnection(object):
 
     def _quit(self):
         self.logger.debug("Quitting in TCPConnection");
-        self.provider.quit()
         try:
             self.conn.close()
         except IOError:
             pass
-        raise ClientGone()
 
     def __init__(self, provider, logger, method='socket', client_socket=None):
         """Init the server side object for a new connection
@@ -428,6 +426,8 @@ class TCPConnection(object):
             cmd = self.conn.receive_line()
         except IOError:
             self._quit()
+            raise ClientGone()
+
         # Check if we didn't get only data
         if cmd == None:
             return None
@@ -536,6 +536,9 @@ class TCPConnection(object):
             self.conn.send_reply(code, "EVENT", [event_line,])
         except:
             self._quit()
+
+    def close(self):
+        self._quit()
 
 def tcp_format_event(event):
         """Format event line according to text protocol specifications"""
