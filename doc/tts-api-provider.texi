@@ -1,4 +1,3 @@
-cvs-st  
 \input texinfo   @c -*-texinfo-*-
 @c %**start of header
 @setfilename tts-api-provider.info
@@ -421,7 +420,7 @@ available if the device can return the synthesized data to the caller.
 For simple hardware synthesizers, only method playback is available.
 However, when both playback and retrieval are available by the device
 itself and the client requests playback, Provider will use
-'emulated_playback' so that we have full controll over the playback
+'emulated_playback' so that we have full control over the playback
 and we do not have to deal with the (usually numerous) bugs in
 synthesizers implementation of audio output (device blocking etc.)
 according to the TTS API Provider design decisions.
@@ -701,16 +700,140 @@ are planned for very near future however.
 @chapter TTS API Implementations
 
 @menu
+* Basic Usage of TTS API::      
 * Text Protocol TTS API::       
 * Python TTS API::              
 @end menu
 
-@node Text Protocol TTS API, Python TTS API, TTS API Implementations, TTS API Implementations
+@node Basic Usage of TTS API, Text Protocol TTS API, TTS API Implementations, TTS API Implementations
+@section Basic Usage of TTS API
+
+@menu
+* Understanding the API::       
+* Initializing and closing a connection::  
+* Parameter settings::          
+* Speaking and audio retrieval::  
+* Callbacks and events::        
+* Serialized and simultaneous speech::  
+@end menu
+
+@node Understanding the API, Initializing and closing a connection, Basic Usage of TTS API, Basic Usage of TTS API
+@subsection Understanding the API
+
+The set of functions available in TTS API Provider, called TTS API, is
+defined in a general way at
+@url{http://www.freebsoft.org/doc/tts-api/tts-api.html}. We highly
+recommend you to study this document carefully before proceeding
+further. The interface itself has various implementations. Currently,
+there is the TCP text protocol implementation and a python library
+implementation. These implementations of the interface differ in the
+coding syntax, in the way how functions are called and in the parameter
+types. They however should not differ in the functionality provided, so
+your best and most accurate guide to the exact meaning of the functions
+provided is the description of TTS API itself mentioned above, to which
+the various implementations must conform.
+
+Bellow follows a brief overview of the API and some examples of its
+proper usage.
+
+@node Initializing and closing a connection, Parameter settings, Understanding the API, Basic Usage of TTS API
+@subsection Initializing and closing a connection
+
+TTS API does not require any @code{init} command at the beginning of
+each session. Each connection becomes fully operational directly after
+connecting on the given socket or creating the appropriate object
+according to the communication method in use. When some kind of an
+@code{init()} function is necessary for a given API, this is mentioned
+in the API documentation.
+
+At the end of each session, client program should call the
+@code{close()} function to notify TTS API Provider about session
+termination and to close the socket/connection.
+
+@node Parameter settings, Speaking and audio retrieval, Initializing and closing a connection, Basic Usage of TTS API
+@subsection Parameter settings
+
+TTS API allows the controlling application to set various speech and controll
+parameters. Please see @url{http://www.freebsoft.org/doc/tts-api/tts-api.html#Parameter-Settings}
+for a detailed overview.
+
+@node Speaking and audio retrieval, Callbacks and events, Parameter settings, Basic Usage of TTS API
+@subsection Speaking and audio retrieval
+
+The client application can request synthesis of text message into audio
+stream. Depending on the configuration and synthesizer capabilities,
+this audio stream can be played by the synthesizer, by the TTS API
+Provider audio subsystem or retrievaed to the client application for
+further processing.
+
+Please read
+@url{http://www.freebsoft.org/doc/tts-api/tts-api.html#Speech-Synthesis-Commands}
+for information about the available speech synthesis commands. If you are interested
+in audio retrieval, please also read @url{http://www.freebsoft.org/doc/tts-api/tts-api.html#Audio-Retrieval}.
+
+@node Callbacks and events, Serialized and simultaneous speech, Speaking and audio retrieval, Basic Usage of TTS API
+@subsection Callbacks and events
+
+It is essential for proper synchronization in client application and for
+further sound processing that the synthesized audio stream is
+accompanied with marking information about the former text (sentence and
+word boundaries). In case playback of the audio stream is done on the
+TTS API Provider side, it is also necessary that some kind of callbacks
+is provided so that the client application knows when speech is started
+or stopped. Both of these mechanisms are supported by the TTS API
+Provider.
+
+The mechanism of reporting this information differs based on whether
+playback or audio retrieval is requested. In case of audio retrieval,
+the information about various events and their timing in the given audio
+stream is sent in a well defined format along with the audio data.  On
+the other side, if playback is requested, the events are reported in a
+form of callbacks at the time when they are reached by the audio
+playback. The exact mechanism may differ according to the API
+implementation.
+
+For further information about events in audio retrieval mode,
+please see @url{http://www.freebsoft.org/doc/tts-api/tts-api.html#Audio-Retrieval}.
+
+For further information about in-playback callbacks, please see
+@url{http://www.freebsoft.org/doc/tts-api/tts-api.html#Event-Callbacks}
+and read the documentation specific to the API implementation you use to
+learn about the exact mechanism.
+
+@node Serialized and simultaneous speech,  , Callbacks and events, Basic Usage of TTS API
+@subsection Serialized and simultaneous speech
+
+Where there are more than one message to be synthesized and played, the
+client application may want to achieve either serialized or simultanous
+speech, or a combination of them. Serialized speech means that the
+messages are spoken one after another without any overlaps, while in
+simultanous speech messages are spoken all at the same time. Both
+approaches might be useful in certain situations.
+
+TTS API is a low-level interface and for this reason, it doesn't attempt
+to solve the synchronization and playback timing of messages. The client
+application needs to take care of that.  Nor TTS API Provider connection
+nor the API itself is designed to process more than one synthesis
+request at a time and such attempts will be rejected.
+
+Thus if the client application wants to synthesize/ speak two or more
+messages in parallel, it must open the corresponding number of
+independent connections. Each connection to TTS API Provider gets in
+turn its own independent connection to the synthesizer (or its own
+instance of the synthesizer), so that it is able to fulfill synthesis
+requests really in parallel.
+
+When serialized speech (in other words, one message after another) is
+desired, the calling program must ensure this using callbacks. A new
+synthesis request can only be sent after the message_end callback is
+delivered to the program.
+
+@node Text Protocol TTS API, Python TTS API, Basic Usage of TTS API, TTS API Implementations
 @section Text Protocol TTS API
 
-This section documents the text protocol in use for communication
-over sockets, pipes and other channels where serialized textual
-protocol is a convenient interface.
+This section documents the text protocol in use for communication over
+sockets, pipes and other channels where serialized textual protocol is a
+convenient interface.
 
 In the protocol description bellow, accent is put on form.  The exact
 expected behavior of all the commands and the exact meaning of the
@@ -1552,6 +1675,18 @@ HELP
 @section Python TTS API
 
 Python API is documented through docstrings and embedded comments.
-Please see @file{src/ttsapi/client.py} in the source tree.
+Please see @file{src/ttsapi/client.py} in the source tree. This
+documentation however includes only facts specific for the python
+implementation and only a very brief description of the functionality
+provided by the offered methods.
+
+Please read first @pxref{Basic Usage of TTS API} for a general overview
+of how to use the API.
+
+Please also refer to
+@url{http://www.freebsoft.org/doc/tts-api/tts-api.html} for the exact
+general description of the functionality provided by the API functions and
+for the description of the event/callback and playback/audio retrieval
+mechanisms in use.
 
 @bye
