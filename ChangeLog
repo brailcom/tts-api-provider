@@ -1,3 +1,7 @@
+2008-01-21  Hynek Hanke  <hanke@syrr.buchal.name>
+
+	* doc/tts-api-provider.texi (Basic Usage of TTS API): New section.
+
 2007-12-21  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* src/ttsapi/server.py (TCPConnection.close): New method.
