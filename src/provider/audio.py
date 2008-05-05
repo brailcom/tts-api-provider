@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: audio.py,v 1.9 2007-12-19 13:16:03 hanke Exp $
+# $Id: audio.py,v 1.10 2008-05-05 15:04:22 hanke Exp $
 
 """Audio server, accepts connections with audio data and events, plays
 audio data and emits events.
@@ -249,7 +249,6 @@ class Audio(object):
             source.unqueue_buffers(256)
             self.play(message_id, event_sleeper)
 
-
 # --- AUDIO SERVER IMPLEMENTATION ---
 
 def init(logger):
@@ -317,6 +316,8 @@ def receive_data(socket, event_sleeper):
     """Receive a block of data as defined in TTS API
     over socket"""
 
+    expecting_data = False
+
     header = socket.receive_line()
 
     # HEADER
@@ -329,32 +330,35 @@ def receive_data(socket, event_sleeper):
     if head != "BLOCK":
         raise "Bad syntax on audio socket (BLOCK expected)"
     
-    log.info("Receiving audio block number " + str(block_number)
+    log.timestamp("Receiving audio block number " + str(block_number)
     + " for message id " + str(msg_id))
 
     # PARAMETERS SECTION
     param_header = socket.receive_line()
+
     if param_header != ['PARAMETERS']:
-        raise "Ommited PARAMETERS section on audio socket"
-    
-    data_length = None
-    while True:
-        parameter_line = socket.receive_line()
-        log.debug("Parameter line: " + str(parameter_line));
-        if parameter_line == ['END', 'OF', 'PARAMETERS']:
-            break
-        if parameter_line[0] == 'data_length':
-            data_length = int(parameter_line[1])
-            log.debug("Setting data length to " + str(data_length))
-        if parameter_line[0] == 'sample_rate':
-            sample_rate = int(parameter_line[1])
-            log.debug("Setting sample rate to " + str(sample_rate))
-    
-    if data_length == None:
-        raise "Unspecified data length"
+        log.debug("Ommited PARAMETERS section on audio socket")
+        event_header = param_header
+    else:
+        data_length = None
+        while True:
+            parameter_line = socket.receive_line()
+            log.debug("Parameter line: " + str(parameter_line));
+            if parameter_line == ['END', 'OF', 'PARAMETERS']:
+                break
+            if parameter_line[0] == 'data_length':
+                data_length = int(parameter_line[1])
+                log.debug("Setting data length to " + str(data_length))
+            if parameter_line[0] == 'sample_rate':
+                sample_rate = int(parameter_line[1])
+                log.debug("Setting sample rate to " + str(sample_rate))
+        expecting_data = True
+        if data_length == None:
+            raise "Unspecified data length"
+
+        event_header = socket.receive_line()
 
     # EVENTS SECTION
-    event_header = socket.receive_line()
     event_lines = []
 
     event_list_lock.acquire()
@@ -374,6 +378,7 @@ def receive_data(socket, event_sleeper):
                                                      pos_text=int(entry[2]),
                                                      pos_audio=int(entry[3]),
                                                      message_id=msg_id))
+                log.debug("event appended to list")
             elif entry[0] in ('word_start', 'word_end', 'sentence_start',
                               'sentence_end'):
                 event_list[msg_id].append(AudioEvent(type=entry[0],
@@ -391,31 +396,36 @@ def receive_data(socket, event_sleeper):
             # Interrupt event sleeper and give it a chance
             # to recalculate when the next callback should be
             # sent
+            log.debug("Interrupting event sleeper")
             event_sleeper.interrupt()
 
-        data_header = socket.receive_line()
+        if expecting_data:
+            data_header = socket.receive_line()
     else:
         data_header = event_header
     event_list_lock.release()
 
     # DATA SECTION
-    if data_header != ['DATA']:
-        raise "Missing DATA section"
+    if expecting_data:
+        if data_header != ['DATA']:
+            log.debug("Missing DATA section")
+            raise "Missing DATA section"
+        else:
+            if (data_length != 0):
+                log.debug("Reading data of length " + str(data_length))
+                audio_data = socket.read_data(data_length)
+                assert len(audio_data) == data_length
+            else:
+                audio_data = ""
+            data_footer = socket.receive_line()
+            log.debug("Data footer: " + str(data_footer))
+            if data_footer != ['END', 'OF', 'DATA']:
+                raise "Missing END OF DATA"
     
-    if (data_length != 0):
-        log.debug("Reading data of length " + str(data_length))
-        audio_data = socket.read_data(data_length)
-        assert len(audio_data) == data_length
-    else:
-        audio_data = ""
-    data_footer = socket.receive_line()
-    log.debug("Data footer: " + str(data_footer))
-    if data_footer != ['END', 'OF', 'DATA']:
-        raise "Missing END OF DATA"
-    
-    # Block of data read, add data to audio
-    log.debug("OK data received, sending to audio")
-    audio.add_data(msg_id, audio_data, "raw", sample_rate, 1, "S16_LE", event_sleeper)
+        # Block of data read, add data to audio
+        log.debug("OK data received, sending to audio")
+        log.timestamp("TIME: Received block of audio data: ") 
+        audio.add_data(msg_id, audio_data, "raw", sample_rate, 1, "S16_LE", event_sleeper)
     
 def connection_handling(event_sleeper):
     """Handle incomming connections and read data into buffers
