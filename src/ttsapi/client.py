@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: client.py,v 1.13 2007-11-21 12:53:19 hanke Exp $
+# $Id: client.py,v 1.14 2008-05-07 08:25:46 hanke Exp $
  
 """Python implementation of TTS API over text protocol"""
 
@@ -56,7 +56,7 @@ d    available from
         port -- server port as a number
           
         """
-        assert method in ['socket', 'pipe']
+        assert method in ['socket', 'pipe', 'shm']
 
         self._callbacks = {
             'message_start' : [],
@@ -77,6 +77,12 @@ d    available from
             self._conn = connection.SocketConnection(host, port, logger=logger, provider=self)
         elif method == 'pipe':
             self._conn = connection.PipeConnection(pipe_in, pipe_out, logger=logger, provider=self)
+        elif method == 'shm':
+            self._conn = connection.SHMConnection(logger=logger, side='client',
+                                                  provider=self)
+            self.key = self._conn.key()
+            self.read_semaphore_key = self._conn.read_semaphore_key()
+            self.write_semaphore_key = self._conn.write_semaphore_key()
             
     # Driver discovery
 
@@ -84,6 +90,14 @@ d    available from
         """Initialize connection"""
         self.logger.info("Initializing connection")
         self._conn.send_command("INIT")
+
+
+        self.current_voice_name = None
+        self.current_voice_description = None
+        self.current_voice_variant = None
+        self.current_audio_output_method = None
+        self.current_audio_retrieval_host = None
+        self.current_audio_retrieval_port = None
 
     def quit(self):
         """Quit"""
@@ -500,7 +514,10 @@ d    available from
         method -- one of 'playback', 'retrieval'          
         """
         assert method in ('playback', 'retrieval')
-        self._conn.send_command("SET AUDIO OUTPUT", method)
+
+        if method != self.current_audio_output_method:
+            self.current_audio_output_method = method
+            self._conn.send_command("SET AUDIO OUTPUT", method)
 
     def set_audio_retrieval_destination(self, host, port):
         """Set destination for audio retrieval socket.
@@ -512,7 +529,12 @@ d    available from
         """
         assert isinstance(host, str)
         assert isinstance(port, int) and port > 0
-        self._conn.send_command("SET AUDIO RETRIEVAL", host, port)
+
+        if ((host != self.current_audio_retrieval_host) 
+            or (port != self.current_audio_retrieval_port)):
+            self.current_audio_retrieval_port = port
+            self.current_audio_retrieval_host = host
+            self._conn.send_command("SET AUDIO RETRIEVAL", host, port)
 
     # Callbacks
     
