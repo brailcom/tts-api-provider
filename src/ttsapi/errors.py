@@ -79,6 +79,12 @@ class ErrorWrongEncoding(ClientError):
     """Invalid encoding from client."""
     pass
 
+class ErrorDriverBusy(ClientError):
+    """Driver can't process the message because it is currently
+    processing another message."""
+    pass
+
+
 class _CommunicationError(Exception):
     def __init__ (self, code, msg, data):
         Exception.__init__(self, "%s: %s" % (code, msg))
