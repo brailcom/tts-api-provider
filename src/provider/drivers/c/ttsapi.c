@@ -2,6 +2,8 @@
 // C API of TTS API implementation
 
 #include <stdio.h>
+#include <string.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -472,8 +474,9 @@ _ttsapi_say_text(GList* args, GHashTable *driver_functions, char* data){
   int (*driver_say_text)(ttsapi_msg_format, char*);
   int (*driver_say_text_asynchro)(ttsapi_msg_format, char*);
   ttsapi_msg_format format;
-
   GList *id_data = NULL;
+
+  TIMESTAMP("Say text request");
 
   driver_say_text = \
     _ttsapi_get_function("say_text", driver_functions);
@@ -511,6 +514,9 @@ _ttsapi_say_text(GList* args, GHashTable *driver_functions, char* data){
   
 
   id_data = g_list_append(id_data, strdup("1"));
+
+  TIMESTAMP("End of say_text");
+ 
   return _construct_reply(204, "OK MESSAGE RECEIVED", id_data);
 }
 
@@ -903,7 +909,7 @@ driver_audio_connection_init(char *host, int port)
   setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &tcp_no_delay, sizeof(int));
 
   /* Create a stream */
-  stream = fdopen(sock, "r");
+  stream = fdopen(sock, "w");
   if (!stream){
     DBG("ERROR: Can't create a stream for socket, fdopen() failed.");
     return NULL;
@@ -926,6 +932,10 @@ driver_send_audio(FILE* audio_server_stream, ttsapi_audio_block_t *block)
   GString *output;
   int ret;
 
+  assert(audio_server_stream != NULL);
+
+  TIMESTAMP("Request to send audio block %d for message %d", block->number, block->msg_id);
+
   output = g_string_new("");
 
   if (block == NULL) return -1;
@@ -944,14 +954,14 @@ driver_send_audio(FILE* audio_server_stream, ttsapi_audio_block_t *block)
       DBG("Invalid audio format passed to driver_send_audio()");
       return -1;
     }
-    g_string_append_printf(output, "data_format=%s"NEWLINE, data_format_str);
+    g_string_append_printf(output, "data_format %s"NEWLINE, data_format_str);
     g_free(data_format_str);
   }
   DBG("INCOMMING Data length: %ld", block->data_length);
-  g_string_append_printf(output, "data_length=%ld"NEWLINE, block->data_length);
-  g_string_append_printf(output, "audio_length=%ld"NEWLINE, block->audio_length);
-  g_string_append_printf(output, "sample_rate=%d"NEWLINE, block->sample_rate);
-  g_string_append_printf(output, "channels=%d"NEWLINE, block->channels);
+  g_string_append_printf(output, "data_length %ld"NEWLINE, block->data_length);
+  g_string_append_printf(output, "audio_length %ld"NEWLINE, block->audio_length);
+  g_string_append_printf(output, "sample_rate %d"NEWLINE, block->sample_rate);
+  g_string_append_printf(output, "channels %d"NEWLINE, block->channels);
   
   {
     GString *encoding_str;
@@ -969,7 +979,7 @@ driver_send_audio(FILE* audio_server_stream, ttsapi_audio_block_t *block)
     else
       g_string_append_printf(encoding_str, "BE");
 
-    g_string_append_printf(output, "encoding=%s"NEWLINE, encoding_str->str);
+    g_string_append_printf(output, "encoding %s"NEWLINE, encoding_str->str);
     g_string_free(encoding_str, 1);
   }
 
@@ -985,10 +995,16 @@ driver_send_audio(FILE* audio_server_stream, ttsapi_audio_block_t *block)
   }
   g_string_append_printf(output, "END OF DATA"NEWLINE);
 
-  ret = fprintf(audio_server_stream, output->str);
+  DBG("OUTPUTING: ||%s||", output->str);
+  ret = fwrite(output->str, output->len, 1, audio_server_stream);
+  if (ret <= 0){
+    DBG("Written 0 or -1 bytes, error: %s", strerror(errno));
+  }
   DBG("Written %d bytes out of %ld into audio socket", ret, output->len);
   fflush(audio_server_stream);
-  
+
+  TIMESTAMP("Data block sent to audio");  
+
   g_string_free(output, 1);
 
   return 0;
@@ -1013,6 +1029,9 @@ driver_main_loop(GHashTable* function_dictionary){
   
   char *c1, *c2, *c3;
   GList *command;
+
+  TTSAPI_DRIVER_DEBUGGING = 0;
+  TTSAPI_DRIVER_TIMING = 1;
 
   /* Init _ttsapi_asynchro_request */
   g_thread_init(NULL);
