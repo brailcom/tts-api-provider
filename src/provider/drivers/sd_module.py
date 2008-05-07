@@ -19,7 +19,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: sd_module.py,v 1.2 2007-11-21 12:57:24 hanke Exp $
+# $Id: sd_module.py,v 1.3 2008-05-07 08:20:51 hanke Exp $
 
 """Interface to Speech Dispatcher modules"""
 
@@ -702,11 +702,13 @@ def main():
 
     global conf
     
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 5:
         print "Can't initialize driver, no module path, module configuration path or synthesizer name specified"
         return -1
 
-    conf.synthesizer, conf.binary_path, conf.binary_conf = sys.argv[1:]
+    # TODO: This needs to be modified to handle shared memmory communication
+    # as well where arguments have different position
+    conf.synthesizer, conf.binary_path, conf.binary_conf = sys.argv[2:]
 
     driver.main_loop(Core, Controller)
     
