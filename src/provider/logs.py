@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: logs.py,v 1.4 2007-11-17 21:12:21 pdm Exp $
+# $Id: logs.py,v 1.5 2008-05-07 08:13:26 hanke Exp $
 
 import logging
 import sys
@@ -34,7 +34,7 @@ class Logging(logging.Logger):
         logging.Logger.__init__(self, 'tts-api-provider', level=logging.DEBUG)
         self.stdout_handler = logging.StreamHandler(sys.stdout)
         self.addHandler(self.stdout_handler)
-        
+
     def init_stage2(self, conf):
         """Close stderr logging output and initialize logging with all config
         options
@@ -58,3 +58,13 @@ class Logging(logging.Logger):
             self.file_handler.setFormatter(formatter)
             self.addHandler(self.file_handler)
         self.setLevel(conf.log_level)
+        
+
+        # New level: Timestamp, see also self.timestamp()
+        logging.TIMESTAMP=conf.timestamp_priority
+        logging.addLevelName(logging.TIMESTAMP, "TIMESTAMP")
+
+    def timestamp(self, arg):
+        """Log timestamps"""
+        self.log(logging.TIMESTAMP, arg)
+
