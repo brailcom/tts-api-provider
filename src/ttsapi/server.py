@@ -39,7 +39,8 @@ class TCPConnection(object):
         except IOError:
             pass
 
-    def __init__(self, provider, logger, method='socket', client_socket=None):
+    def __init__(self, provider, logger, method='socket', client_socket=None, memory_key=None,
+                 read_semaphore_key=None, write_semaphore_key=None):
         """Init the server side object for a new connection
         
         Arguments:
@@ -56,6 +57,11 @@ class TCPConnection(object):
                                                     logger=logger, side='server')
         elif method == 'pipe':
             self.conn = connection.PipeConnection(logger=logger, side='server')
+        elif method == 'shm':
+            self.conn = connection.SHMConnection(logger=logger, side='server',
+                                                 memory_key=memory_key,
+                                                 read_semaphore_key=read_semaphore_key,
+                                                 write_semaphore_key=write_semaphore_key)
         else:
             raise "Unknown method of communication" + method
     
@@ -311,6 +317,7 @@ class TCPConnection(object):
             (ErrorDriverNotLoaded, (304, 'DRIVER NOT LOADED')),
             (ErrorRetrievalSocketNotInitialized, (305, 'RETRIEVAL SOCKET NOT INITIALIZED')),
             (ErrorDriverNotAvailable, (303, 'DRIVER NOT AVAILABLE')),
+            (ErrorDriverBusy, (306, 'DRIVER BUSY')),
             (ErrorInternal, (399, 'INTERNAL ERROR')),
             (ErrorInvalidCommand, (400, 'INVALID COMMAND')),
             (ErrorInvalidArgument, (401, 'INVALID ARGUMENT')),
@@ -410,6 +417,8 @@ class TCPConnection(object):
                     err_detail = error.detail()
                     break
                 else:
+                    self.logger.info("Unknown error received " + str(error) + " mapping to UnknownError.")
+                    self.logger.info("Traceback: " + traceback.format_exc())
                     err_code = 300
                     err_reply = "UNKNOWN ERROR"
                     err_detail = None
@@ -506,10 +515,11 @@ class TCPConnection(object):
                 if action['reply']: 
                     self._report_error(err);
                 return
+            
             except Exception, e:
-                self.logger.info("ERROR: Can't execute function, following is the reason: "
-                                 + traceback.format_exc())
+                self.logger.info("ERROR: Can't execute function, following is the reason: " + traceback.format_exc())
                 if action['reply']:
+                    self.logger.debug("Reporting unknown error to client");
                     self._report_error(UnknownError)
                 return
 

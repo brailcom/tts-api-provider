@@ -1,3 +1,55 @@
+2008-05-07  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/ttsapi/errors.py (ErrorDriverBusy): New class.
+
+	* src/ttsapi/connection.py (SHMConnection): New class.
+
+	* src/ttsapi/client.py (TCPConnection.__init__): Shared memmory 'shm'
+	added to supported communication methods.
+
+	* src/provider/drivers/c/ttsapi.h (TIMESTAMP): New macro.
+	(DBG): Only do debugging output if TTSPI_DRIVER_DEBUGGING is
+	true.
+
+	* src/provider/drivers/c/ttsapi.c (driver_audio_connection_init): Create stream
+	in write mode.
+	(driver_send_audio): Removed '=' signs in protocol.
+
+	* src/provider/drivers/c/espeak.c (say_text_asynchro): Renamed
+	from say_text_asynchro.  This function is now called from a
+	separate thread (this is the fundamental difference, not the
+	change of name) because calling it synchronously proved to be slow.
+	
+	* src/provider/drivers/sd_module.py (main): Reposition argv arguments since
+	the first argument is now communication_method.
+
+	* src/provider/drivers/festival.py (Controller.retrieve_data.read_item): Bugfix for
+	correct procesing of mesage_end event.
+
+	* src/provider/drivers/driver.py (RetrievalSocket.send_data_block): Handle the case when
+	there are no data to send, just events and index marks.
+	(DriverLogger.__init__): New class.
+	(main_loop): Handle shared memory 'shm' communication mode.
+
+	* src/provider/provider.py (Provider.say_text): Additional debugging messages.
+	(Provider.say_icon): Do not check for current_message_id unless mutex protected.
+	(Provider.__init__): Launch driver in with either 'pipe' or 'shm' communication
+	according to configuration
+
+	* src/provider/logs.py (Logging.init_stage2): New level: timestamp.
+
+	* src/provider/configuration.py (Configuration): timestamp_priority: new option.
+	(Configuration): Different format for output modules configuration.
+
+2008-04-24  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/provider/provider.py (Provider.set_audio_output): List just relevant fields of real_capabilities in debugging output.
+
+2008-04-23  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/provider/drivers/festival.py (Controller.retrieve_data.read_item): Always first send data
+	to socket, then check for other data with speechd-next.
+
 2008-01-21  Hynek Hanke  <hanke@syrr.buchal.name>
 
 	* doc/tts-api-provider.texi (Basic Usage of TTS API): New section.
