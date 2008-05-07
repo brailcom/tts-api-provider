@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: provider.py,v 1.14 2007-11-23 09:22:38 hanke Exp $
+# $Id: provider.py,v 1.15 2008-05-07 08:17:01 hanke Exp $
  
 """TTS API Provider core logic"""
 
@@ -72,43 +72,58 @@ class Provider(object):
         self.audio = audio
         self.global_state = global_state
         self.loaded_drivers = {}
-        for entry in conf.available_drivers:
-            if len(entry) == 2:
-                name, executable = entry
-                args = ["",]
-            elif len(entry) == 3:
-                name, executable, args = entry
-            else:
-                raise "Invalid number of output module parameters"
-
+        for module_info in conf.available_drivers:
+            
             # TODO: Create log files based on PID
             # Currently, it is necessary to compare the log
             # times
             id = random.randrange(1,10000,1)
             logfile = open(os.path.join(conf.log_dir,
-                                        name+"-"+str(id)+".log"), "w")
-            process = subprocess.Popen(args=[executable]+args,
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logfile)
-                # bufsize = 1 means line buffered
-            logfile = open(conf.log_dir+name+"-"+str(id)+".log", "w")
+                                        module_info['driver']+"-"+str(id)+".log"), "w")
+            name = module_info['driver']
+
+            if module_info.has_key('args'):
+                module_executable_args = module_info['args']
+            else:
+                module_executable_args = []
 
             try:
-                process = subprocess.Popen(args=[executable]+args,
+                if module_info['communication'] == "shm":
+                    driver_com = ttsapi.client.TCPConnection(method = 'shm',
+                                                             logger=log)
+                    log.debug("Communication with "+ name + " via shared memory")
+
+                    process = subprocess.Popen(args=[module_info['executable'],]+ ["shm",] +
+                                           [str(driver_com.key),
+                                           str(driver_com.write_semaphore_key),
+                                           str(driver_com.read_semaphore_key)] +
+                                           module_executable_args,
+                                           stderr=logfile)
+                    log.debug("Subprocess for driver" + name + "initalized")
+                elif module_info['communication'] == "pipe":
+                    process = subprocess.Popen(args=[module_info['executable'],]+ ["pipe",] +
+                                           module_executable_args,
                                            stdin=subprocess.PIPE,
                                            stdout=subprocess.PIPE,
                                            stderr=logfile)
+                    log.debug("Subprocess for driver" + name + "initalized")
+                    driver_com = ttsapi.client.TCPConnection(method = 'pipe',
+                                                             pipe_in = process.stdout,
+                                                             pipe_out = process.stdin,
+                                                             logger=log)
+                    log.debug("Communication with "+ name + " via pipes")
 
+                else:
+                    raise "Unknown communication mechanism with output module"
+                
             except OSError:
                 log.error("Can't launch driver  "+ name);
                 continue;
             # bufsize = 1 means line buffered
-            log.debug("Subprocess for driver" + name + "initalized")
             self.loaded_drivers[name] = Driver(process=process, name=name,
-                com = ttsapi.client.TCPConnection(method = 'pipe',
-                                                  pipe_in = process.stdout,
-                                                  pipe_out = process.stdin,
-                                                  logger=log))
+                                               com = driver_com)
             log.debug("Driver instance for driver" + name + "created")
+
             try:
                 self.loaded_drivers[name].com.init()
             except TTSAPIError, error:
@@ -273,14 +288,20 @@ class Provider(object):
         assert character == None or isinstance(character, int)
         global current_message_id
 
+        #TODO: mutex
+        #if current_message_id != None:
+        #    raise ErrorDriverBusy()
+
         if not self.current_driver:
             raise ErrorDriverNotAvailable
 
         message_id = self.global_state.new_message_id(self)
         current_message_id = message_id
         self.current_driver.com.set_message_id(message_id)
+        log.debug("Preparing for message")
         self._prepare_for_message(message_id)
 
+        log.debug("Plain text emulation")
         # TODO: Escape '<' and '>'
         # Plain text emulation
         cap_message_format = self.current_driver.real_capabilities.message_format
@@ -297,9 +318,11 @@ class Provider(object):
                 raise "Format not supported in driver or invalid format. Requested: " + str(format) + \
                     " Offered: " + str(cap_message_format)
 
+        log.debug("Calling driver say_text")
         self.current_driver.com.say_text(text, format, position, position_type,
                                          index_mark, character)
         
+        log.debug("Returning message id")
         return message_id
         
     def say_deferred (self, message_id,
@@ -321,7 +344,7 @@ class Provider(object):
             or isinstance(index_mark, unicode)
         assert character == None or isinstance(character, int)
 
-        raise ErrorNotSupportedByServer
+        raise ErrorNotSupportedByServer()
 
     def say_key (self, key):
         """Synthesize a key event.
@@ -333,6 +356,10 @@ class Provider(object):
         global current_message_id
         assert isinstance(key, str) or isinstance(key, unicode)
 
+        #TODO: mutex
+        #if current_message_id != None:
+        #    raise ErrorDriverBusy()
+        
         if not self.current_driver:
             raise ErrorDriverNotAvailable
 
@@ -356,6 +383,10 @@ class Provider(object):
         assert len(character) == 1
         global current_message_id
 
+        #TODO: mutex
+        #if current_message_id != None:
+        #    raise ErrorDriverBusy()
+
         if not self.current_driver:
             raise ErrorDriverNotAvailable
 
@@ -377,6 +408,10 @@ class Provider(object):
         assert isinstance(icon, str)
         global current_message_id
 
+        #TODO: mutex
+        #if current_message_id != None:
+        #    raise ErrorDriverBusy()
+
         if not self.current_driver:
             raise ErrorDriverNotAvailable
         
@@ -397,11 +432,12 @@ class Provider(object):
         if not self.current_driver:
             raise ErrorDriverNotAvailable
 
+
         log.debug("Cancelling current message (id == "+str(current_message_id)+")")
         # Cancel playback in audio
         # Strictly speaking, we should only do this if 'emulated_playback' is used
-        if current_message_id != None:
-            self.audio.post_event('discard', current_message_id)
+        #if current_message_id != None:
+        #    self.audio.post_event('discard', current_message_id)
             
         # NOTE: We are not waiting until the cancel is completed in the driver
         return self.current_driver.com.cancel()
@@ -663,7 +699,7 @@ class Provider(object):
         # if possible, do not use output modules own playback
         # but use retrieval and o audio output here
         log.debug("REAL CAPABILITIES: " + str(self.current_driver.name))
-        log.debug("REQUESTED: " + str(method) + " OFFERED: " + str(self.current_driver.real_capabilities))
+        log.debug("REQUESTED: " + str(method) + " OFFERED: " + str(self.current_driver.real_capabilities.audio_methods))
         if method == 'playback':
             if 'retrieval' in self.current_driver.real_capabilities.audio_methods:
                 self.current_driver.com.set_audio_output('retrieval')
@@ -699,6 +735,9 @@ class Provider(object):
         event is available. Takes care of dispatching
         the audio event through the associated connection."""
         try:
+            #TODO: Mutex
+            if event.type == 'message_end':
+                message_id = -1
             self._connection.send_audio_event(event)
         except ttsapi.server.ClientGone:
             pass
