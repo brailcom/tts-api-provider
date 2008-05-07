@@ -18,12 +18,14 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: connection.py,v 1.14 2007-12-21 15:00:19 hanke Exp $
+# $Id: connection.py,v 1.15 2008-05-07 08:26:10 hanke Exp $
 
 # --------------- Connection handling ------------------------
 
 import socket as socket_
+import shm_wrapper
 import string
+import time
 import sys
 import os
 from copy import copy
@@ -150,6 +152,8 @@ class Connection(object):
         data = []
         c = None
         while True:
+            if self.logger:
+                self.logger.debug("Reading server reply in _recv_message")
             line = self._read_line()
             assert len(line) > 0
             assert len(line) >= 4, "Malformed data received from server: |" + line + "|"
@@ -336,6 +340,7 @@ class SocketConnection(Connection):
                 logger.debug("Opening new socket")
             self._socket = socket_.socket(socket_.AF_INET, socket_.SOCK_STREAM)
             self._socket.setsockopt(socket_.SOL_SOCKET, socket_.SO_REUSEADDR, 1)
+            self._socket.setsockopt(socket_.SOL_TCP, socket_.TCP_NODELAY, 1)
             self._socket.connect((socket_.gethostbyname(host), port))
         else:
             if logger:
@@ -491,3 +496,123 @@ class PipeConnection(Connection):
         self.pipe_in.close()
         Connection.close(self)
 
+class SHMConnection(Connection):
+    """Connection through shared memmory"""
+    
+    NEWLINE = "\r\n"
+
+    _buffer = ''
+    _data_transfer = False
+
+    def __init__(self, logger=None, side='client',
+                 memory_key=None, 
+                 read_semaphore_key=None,
+                 write_semaphore_key=None,
+                 provider = None):
+        """Setup pipes for communication
+        """
+        assert ((side == 'client') 
+                or ((memory_key != None) and (read_semaphore_key != None)
+                    and (write_semaphore_key != None)))
+
+        if side == 'client':
+            self.memory_handle = shm_wrapper.create_memory(16384)
+            self.read_semaphore = shm_wrapper.create_semaphore(InitialValue=0)
+            self.write_semaphore = shm_wrapper.create_semaphore(InitialValue=0)
+        if side == 'server':
+            self.memory_handle = shm_wrapper.SharedMemoryHandle(memory_key)
+            self.read_semaphore = shm_wrapper.SemaphoreHandle(read_semaphore_key)
+            self.write_semaphore = shm_wrapper.SemaphoreHandle(write_semaphore_key)
+            
+        self.side = side
+        Connection.__init__(self, logger=logger, side=side, provider=provider)
+
+    def _read_line(self):
+        """Read one whole line from the socket.
+        
+        Read from the socket until the newline delimeter (given by the
+        `NEWLINE' constant).  Blocks until the delimiter is read.
+        
+        """
+        pointer = self._buffer.find(self.NEWLINE)
+        while pointer == -1:
+            res = self._recv()
+            if len(res) == 0:
+                raise IOError
+            self._buffer += res
+            pointer = self._buffer.find(self.NEWLINE)
+        assert pointer >= 0
+        line = self._buffer[:(pointer+len(self.NEWLINE))]
+        self._buffer = self._buffer[pointer+len(self.NEWLINE):]
+        if self.logger:
+            self.logger.debug("Line read from shared memory buffer: ||%s||",  line)
+
+        assert len(line) > 0
+        return line
+
+    def _write(self, data):
+        """Write data to output.
+
+        data -- contains the data to be written including the
+        necessary newlines and carriage return characters."""
+
+        bytes_to_write = len(data)
+
+        try:
+            while bytes_to_write > 0:
+                self.write_semaphore.Z() # Wait for the semaphore to become zero (channel clear)
+                
+                # Write this data    
+                self.memory_handle.write(
+                    data[:self.memory_handle.size] + (self.memory_handle.size - len(data)) * ' ')
+                    
+                # If not all data was written, continue
+                bytes_to_write -= self.memory_handle.size
+                if bytes_to_write > 0:
+                    data = data[bytes_to_write:]
+            
+                if self.logger: 
+                    self.logger.debug("Sent over shared memory: |%s|",  data)
+
+                self.write_semaphore.V() # Increment the semaphore (0->1)
+                self.write_semaphore.V() # Increment the semaphore second time (1->2)
+        finally:
+            pass
+
+    def _recv(self):
+        """Receive data into buffer"""
+        data = ""
+        self.read_semaphore.P() # Wait until semaphore becomes non-zero and decrement (2 -> 1)
+        while not len(data):
+            data = self.memory_handle.read(self.memory_handle.size).strip(' ')
+        if self.logger:
+            self.logger.debug("Received over shared memmory: |%s|", data)
+        self.read_semaphore.P() # Decrement (1->0) to signalize we have read the data
+        # Now the channel is clear again
+        return data
+
+    def close (self):
+        """Close the connection."""
+        #TODO: Destroy shared memory in server
+        Connection.close(self)
+        if self.logger:
+            self.logger.debug("SHM connection closed")
+        
+
+    def key(self):
+        key = self.memory_handle.key
+        if self.logger:
+            self.logger.debug("SHM connection key: " + str(key))
+        return key
+
+    def read_semaphore_key(self):
+        key = self.read_semaphore.key
+        if self.logger:
+            self.logger.debug("SHM read semaphore key: " + str(key))
+        return key
+
+    def write_semaphore_key(self):
+        key = self.write_semaphore.key
+        if self.logger:
+            self.logger.debug("SHM write semaphore key: " + str(key))
+        return key
