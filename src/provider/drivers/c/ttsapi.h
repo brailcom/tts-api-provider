@@ -16,6 +16,10 @@
 //TODO: Why is this not imported via stdio.h??
 size_t getline (char **__lineptr, size_t *__n, FILE *__stream);
 
+
+int TTSAPI_DRIVER_DEBUGGING;
+int TTSAPI_DRIVER_TIMING;
+
 // COMMUNICATION
 
 #define NEWLINE "\r\n"
@@ -166,16 +170,38 @@ typedef struct {
     time_t t; \
     struct timeval tv; \
     char *tstr; \
-    t = time(NULL); \
-    tstr = strdup(ctime(&t)); \
-    tstr[strlen(tstr)-1] = 0; \
-    gettimeofday(&tv,NULL); \
-    fprintf(stderr," %s [%d]",tstr, (int) tv.tv_usec); \
-    fprintf(stderr, ": "); \
-    fprintf(stderr, arg); \
-    fprintf(stderr, "\n"); \
-    fflush(stderr); \
-    g_free(tstr); \
+    if (TTSAPI_DRIVER_DEBUGGING){ \
+      t = time(NULL);	      \
+      tstr = strdup(ctime(&t));			\
+      tstr[strlen(tstr)-1] = 0;			\
+      gettimeofday(&tv,NULL);			       \
+      fprintf(stderr," %s [%d]",tstr, (int) tv.tv_usec);	\
+      fprintf(stderr, ": ");					\
+      fprintf(stderr, arg);					\
+      fprintf(stderr, "\n");					\
+      fflush(stderr);						\
+      g_free(tstr);						\
+    } \
+  }
+
+/* Debugging */
+#define TIMESTAMP(arg...) \
+  {		    \
+    time_t t; \
+    struct timeval tv; \
+    char *tstr; \
+    if (TTSAPI_DRIVER_TIMING){ \
+      t = time(NULL);	      \
+      tstr = strdup(ctime(&t));			\
+      tstr[strlen(tstr)-1] = 0;			\
+      gettimeofday(&tv,NULL);			       \
+      fprintf(stderr,"TIMESTAMP: %s [%d]",tstr, (int) tv.tv_usec);	\
+      fprintf(stderr, ": ");					\
+      fprintf(stderr, arg);					\
+      fprintf(stderr, "\n");					\
+      fflush(stderr);						\
+      g_free(tstr);						\
+    } \
   }
 
 /* Helper macros for the main driver function */
