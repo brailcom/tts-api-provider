@@ -505,6 +505,7 @@ class Controller(driver.Controller):
         block_number = 0
         total_samples = 0
         code, reply_data, audio_data = festival.command('speechd-next')
+        last_block = False
 
         driver.log.info("speechd-next returned code: " + code)
         driver.log.info("speechd-next returned data: " + reply_data)
@@ -512,23 +513,24 @@ class Controller(driver.Controller):
             #driver.log.info("speechd-next returned audio data: " + audio_data)
 
             if (audio_data == None) or (len(audio_data) == 1024):
-                driver.log.info("No audio data for this message, skipping")
-                return
-
-            if audio_data[:4] != "NIST":
-                driver.log.error("NIST header missing in audio block from festival, skipping")
-                # TODO: Maybe return?
-                continue
-        
-            audio_NIST_header = audio_data[:1024]
-            audio_data_raw = audio_data[1024:]
-            #driver.log.info("Audio NIST header follows:\n"+audio_NIST_header)
-            sample_rate = read_item(audio_NIST_header, "sample_rate", int)
-            sample_count = read_item(audio_NIST_header, "sample_count", int)
-            total_samples += sample_count
-            sample_byte_format = read_item(audio_NIST_header, "sample_byte_format", str)
-            sample_n_bytes = read_item(audio_NIST_header, "sample_n_bytes", int)
-            channel_count = read_item(audio_NIST_header, "channel_count", int)
+                driver.log.info("No audio data for this message, last block")
+                last_block = True
+            else:
+                driver.log.timestamp("Received audio data from Festival")
+                if audio_data[:4] != "NIST":
+                    driver.log.error("NIST header missing in audio block from festival, skipping")
+                    # TODO: Maybe return?
+                    continue
+                
+                audio_NIST_header = audio_data[:1024]
+                audio_data_raw = audio_data[1024:]
+                #driver.log.info("Audio NIST header follows:\n"+audio_NIST_header)
+                sample_rate = read_item(audio_NIST_header, "sample_rate", int)
+                sample_count = read_item(audio_NIST_header, "sample_count", int)
+                total_samples += sample_count
+                sample_byte_format = read_item(audio_NIST_header, "sample_byte_format", str)
+                sample_n_bytes = read_item(audio_NIST_header, "sample_n_bytes", int)
+                channel_count = read_item(audio_NIST_header, "channel_count", int)
             
             if sample_byte_format == '01':
                 endian = 'LE'
@@ -541,20 +543,15 @@ class Controller(driver.Controller):
             encoding = 'S'+str(8*sample_n_bytes) + '_' + endian
 
             global retrieval_socket
-            driver.log.info("Sending " + str(len(audio_data_raw)) + " bytes of audio data for playback")
 
-            event_list = []
+            if not last_block:
+                driver.log.info("Sending " + str(len(audio_data_raw)) + " bytes of audio data for playback")
+                event_list = []
+
             if block_number == 0:
                 event_list.append(AudioEvent(type='message_start', pos_text=0,
                                              pos_audio=0))
-                                             
-            code, reply_data, audio_data = festival.command('speechd-next')
-            if (audio_data == None) or (len(audio_data) == 1024):
-                driver.log.info("No more data, appending message_end to event list")
-                event_list.append(AudioEvent(type='message_end', pos_text = 0,
-                                             pos_audio = float(total_samples)/sample_rate*1000))
-
-            
+                                                         
             # Sending datablock to retrieval socket
             retrieval_socket.send_data_block(
                 msg_id = message_id, block_number = block_number,
@@ -567,7 +564,25 @@ class Controller(driver.Controller):
                 event_list = event_list)
             block_number += 1
 
-            
+            code, reply_data, audio_data = festival.command('speechd-next')
+            if (audio_data == None) or (len(audio_data) == 1024):
+                driver.log.info("No more data, appending message_end to event list")
+                event_list=[]
+                event_list.append(AudioEvent(type='message_end', pos_text = 0,
+                                             pos_audio = float(total_samples)/sample_rate*1000))
+                retrieval_socket.send_data_block(
+                    msg_id = message_id, block_number = block_number,
+                    data_format = "raw",
+                    audio_length = sample_count/sample_rate*1000,
+                    audio_data=None,
+                    sample_rate = sample_rate,
+                    channels = channel_count,
+                    encoding = encoding,
+                    event_list = event_list)
+                return
+
+
+
     def say_text (self, text, format='ssml',
                  position = None, position_type = None,
                  index_mark = None, character = None, message_id = None):
@@ -580,6 +595,8 @@ class Controller(driver.Controller):
     
         escaped_text = text.replace('\\','\\\\').replace('"', '\\\"')
         
+        driver.log.timestamp("Sending synthesis request to Festival")
+
         # Ask for synthesis
         try:
             festival.command("speechd-speak-ssml", escaped_text)
