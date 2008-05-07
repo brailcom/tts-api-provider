@@ -216,17 +216,21 @@ list_voices(void)
   return list;
 }
 
+
+/* Say text is declared as asynchronous because although
+   the eSpeak documentation says that espeak_Synth should
+   return immediatelly, it actually takes around 40ms for
+   it to return. */
 int
-say_text(ttsapi_msg_format format, char* text)
+say_text_asynchro(ttsapi_msg_format format, char* text)
 {
   /* TODO: Full implementation of say_text */
 
   DBG("Speaking text: |%s|", text);
-  espeak_Synth(text,strlen(text)-1,
-	       0, POS_CHARACTER,0,
+  espeak_Synth(text, strlen(text)-1,
+               0, POS_CHARACTER, 0,
 	       espeakCHARS_AUTO,
 	       NULL, NULL);
-
   return 0;
 }
 
@@ -335,7 +339,7 @@ main(void)
   DRIVER_REGISTER_FUNCTION(list_drivers);
   DRIVER_REGISTER_FUNCTION(list_voices);
 
-  DRIVER_REGISTER_FUNCTION(say_text);
+  DRIVER_REGISTER_FUNCTION(say_text_asynchro);
   DRIVER_REGISTER_FUNCTION(say_key);
   DRIVER_REGISTER_FUNCTION(say_char);
   DRIVER_REGISTER_FUNCTION(say_icon);
