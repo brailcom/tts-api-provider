@@ -17,7 +17,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: configuration.py,v 1.8 2007-11-23 09:20:59 hanke Exp $
+# $Id: configuration.py,v 1.9 2008-05-07 08:13:19 hanke Exp $
 
 import logging
 import os
@@ -118,7 +118,14 @@ class Configuration(object):
                     'debug':logging.DEBUG
                 })
             },
-        'audio_host' :  
+        'timestamp_priority':
+            {
+                'descr': "Logging priority for TIMESTAMP messages",
+                'type': int,
+                'default': logging.DEBUG-1,
+                #'default': logging.ERROR+1,  //Use this and log_level=ERROR for performance testing
+            },
+        'audio_host' :
             {
                 'descr' : "Audio host (sink) for the server",
                 'doc' : None,
@@ -126,7 +133,7 @@ class Configuration(object):
                 'default' : "127.0.0.1",
                 'command_line' : ("", '--audio-host')
             },
-        'audio_port' :  
+        'audio_port' :
             {
                 'descr' : "Audio port (sink) for the server",
                 'doc' : None,
@@ -140,30 +147,32 @@ class Configuration(object):
                 'descr': "List of driver names and their executables",
                 'doc': None,
                 'type': object,
-                'default': [('espeak',
-                             os.path.join (os.path.dirname (__file__), 'drivers/c/espeak'),                          
-                             ),
-                            ('festival',
-                             os.path.join (os.path.dirname (__file__), 'drivers/festival.py'),                             
-                             ),
-                            ('sd_espeak',
-                             os.path.join (os.path.dirname (__file__), 'drivers/sd_module.py'),
-                             ["Espeak",
-                              "/usr/lib/speech-dispatcher-modules/sd_espeak",
-                              "/etc/speech-dispatcher/modules/espeak.conf"]
-                             ),
-                            ('sd_festival',
-                             os.path.join (os.path.dirname (__file__), 'drivers/sd_module.py'),
-                             ["Festival",
-                              "/usr/lib/speech-dispatcher-modules/sd_festival",
-                              "/etc/speech-dispatcher/modules/festival.conf"]
-                             ),
-                            ('sd_flite',
-                             os.path.join (os.path.dirname (__file__), 'drivers/sd_module.py'),
-                             ["Flite",
-                              "/usr/lib/speech-dispatcher-modules/sd_flite",
-                              "/etc/speech-dispatcher/modules/flite.conf"]
-                             )
+                'default': [{'driver': 'espeak',
+                             'executable': os.path.join (os.path.dirname (__file__), 'drivers/c/espeak'),
+                             'communication': 'pipe'
+                             },
+                            {'driver': 'festival',
+                             'executable': os.path.join (os.path.dirname (__file__), 'drivers/festival.py'),
+                             'communication': 'shm'
+                             },
+                          #  {'driver': 'sd_espeak',
+                          #   'executable': os.path.join (os.path.dirname (__file__), 'drivers/sd_module.py'),
+                          #   'args': ['"Espeak",
+                          #    "/usr/lib/speech-dispatcher-modules/sd_espeak",
+                          #    "/etc/speech-dispatcher/modules/espeak.conf"]
+                          #   },
+                          #  {'driver': 'sd_festival',
+                          #   'executable': os.path.join (os.path.dirname (__file__), 'drivers/sd_module.py'),
+                          #   'args': ["Festival",
+                          #    "/usr/lib/speech-dispatcher-modules/sd_festival",
+                          #    "/etc/speech-dispatcher/modules/festival.conf"]
+                          #   },
+                          #  {'driver': 'sd_flite',
+                          #   'executable': os.path.join (os.path.dirname (__file__), 'drivers/sd_module.py'),
+                          #   'args': ["Flite",
+                          #    "/usr/lib/speech-dispatcher-modules/sd_flite",
+                          #    "/etc/speech-dispatcher/modules/flite.conf"]
+                          #   }
                             ]
             },
         'default_driver':
