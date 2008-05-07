@@ -18,7 +18,7 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 # 
-# $Id: driver.py,v 1.2 2007-11-21 12:42:40 hanke Exp $
+# $Id: driver.py,v 1.3 2008-05-07 08:18:29 hanke Exp $
  
 """TTS API driver logic"""
 
@@ -89,33 +89,38 @@ class RetrievalSocket(object):
         event_list = None):
         """Send a block of data on the retrieval socket, arguments
         as defined in TTS API specifications"""
-        data_length = len(audio_data)
+
+        if audio_data != None:
+            data_length = len(audio_data)
+            assert isinstance(data_length, int)
+
         assert isinstance(msg_id, int) and msg_id >= 0
         assert isinstance(block_number, int) and block_number >= 0
         assert isinstance(data_format, str)
-        assert isinstance(data_length, int)
-        assert isinstance(audio_length, int)
+        assert isinstance(audio_length, int) or audio_data == None
         assert isinstance(sample_rate, int) or sample_rate == None
         assert isinstance(channels, int) or channels == None
         assert isinstance(encoding, str) or encoding == None
         assert isinstance(event_list, list) or event_list == None
         
         ENDLINE = "\r\n"
-        
+
         # BLOCK identification and PARAMETERS block
-        message = ("BLOCK " + str(msg_id) + " " + str(block_number) + ENDLINE
-         + "PARAMETERS" + ENDLINE
-         + "data_format "+data_format+ENDLINE
-         + "data_length "+str(data_length)+ENDLINE
-         + "audio_lenth "+str(audio_length)+ENDLINE)
-         
-        if sample_rate:
-            message += "sample_rate "+str(sample_rate)+ENDLINE
-        if channels:
-            message += "channels "+str(channels)+ENDLINE
-        if encoding:
-            message += "encoding "+encoding+ENDLINE
-        message += "END OF PARAMETERS" + ENDLINE
+        message = "BLOCK " + str(msg_id) + " " + str(block_number) + ENDLINE
+
+        if audio_data != None:
+            message += "PARAMETERS" + ENDLINE \
+                + "data_format "+str(data_format)+ENDLINE \
+                + "data_length "+str(data_length)+ENDLINE \
+                + "audio_lenth "+str(audio_length)+ENDLINE 
+            
+            if sample_rate:
+                message += "sample_rate "+str(sample_rate)+ENDLINE
+            if channels:
+                message += "channels "+str(channels)+ENDLINE
+            if encoding:
+                message += "encoding "+encoding+ENDLINE
+            message += "END OF PARAMETERS" + ENDLINE
         
         # EVENTS block
         if event_list != None and len(event_list)!=0:
@@ -126,10 +131,11 @@ class RetrievalSocket(object):
                 message += event_line+ENDLINE
             message += "END OF EVENTS" + ENDLINE
             
-        # DATA block
-        message += "DATA"+ENDLINE
-        message += audio_data
-        message += "END OF DATA"+ENDLINE
+        if (audio_data != None):
+            # DATA block
+            message += "DATA"+ENDLINE
+            message += audio_data
+            message += "END OF DATA"+ENDLINE
         
         # send it
         self._lock.acquire()
@@ -138,7 +144,10 @@ class RetrievalSocket(object):
         try:
             while bytes_sent < total_bytes:
                 bytes_sent += self._socket.send(message[bytes_sent:])
-                log.debug("Sent " + str(bytes_sent) + " out of " + str(total_bytes) + " data len" + str(len(audio_data)))
+                if audio_data != None:
+                    log.debug("Sent " + str(bytes_sent) + " out of " + str(total_bytes) + " data len" + str(len(audio_data)))
+                else:
+                    log.debug("Sent " + str(bytes_sent) + " bytes")
         finally:
             self._lock.release()
     
@@ -691,17 +700,37 @@ class Configuration(object):
 def EventCallback(connection, event):
     connection.send_audio_event(event)
 
+
+class DriverLogger(logging.Logger):
+
+    def __init__(self, *args, **kwargs):
+
+        logging.Logger.__init__(self, *args, **kwargs)
+
+        self.formatter = logging.Formatter("%(asctime)s %(threadName)s %(levelname)s %(message)s")
+        self.handler = logging.StreamHandler(sys.stderr)
+        self.handler.setFormatter(self.formatter)
+        self.addHandler(self.handler)
+
+        logging.TIMESTAMP = logging.DEBUG+1
+        #logging.TIMESTAMP = logging.WARNING+1   # For profiling
+        logging.addLevelName(logging.TIMESTAMP, "TIMESTAMP")
+
+
+    def timestamp(self, arg):
+        """Log timestamps"""
+        self.log(logging.TIMESTAMP, arg)
+
+
 def main_loop(Core, Controller):
     """Main function and core read-process-notify loop of a driver"""
     global log
+
+    log = DriverLogger('tts-api-driver', level=logging.DEBUG)
     
-    # Initialize logging to stderr.
-    log = logging.Logger('tts-api-driver', level=logging.DEBUG)
-    log_formatter = logging.Formatter("%(asctime)s %(threadName)s %(levelname)s %(message)s")
-    log_handler = logging.StreamHandler(sys.stderr)
-    log_handler.setFormatter(log_formatter)
-    log.addHandler(log_handler)
-    
+    log.debug("Test");
+    log.timestamp("Testing timestamp log")
+
     # Initialize driver Core
     driver_core = Core()
     # Initialize driver controller and attach it to the Core
@@ -710,8 +739,25 @@ def main_loop(Core, Controller):
 
     # Create communication interface as TTS API server
     # over text protocol pipes (stdin, stdout, stderr)
-    driver_comm = ttsapi.server.TCPConnection(provider=driver_core,
-                                              logger=log, method='pipe')
+    log.debug("Argv: " + str(sys.argv))
+
+    com_mechanism = sys.argv[1]
+
+    if com_mechanism == 'shm':
+        memkey = int(sys.argv[2])
+        semaphore_read_key = int(sys.argv[3])
+        semaphore_write_key = int(sys.argv[4])
+        log.debug("Received SHM key " + str(memkey))
+        log.debug("Received SHM read semaphore key " + str(semaphore_read_key))
+        log.debug("Received SHM write semaphore key " + str(semaphore_write_key))
+        driver_comm = ttsapi.server.TCPConnection(provider=driver_core,
+                                                  logger=log, method='shm',
+                                                  memory_key=memkey,
+                                                  read_semaphore_key=semaphore_read_key,
+                                                  write_semaphore_key=semaphore_write_key)
+    elif com_mechanism == 'pipe':
+        driver_comm = ttsapi.server.TCPConnection(provider=driver_core,
+                                                  logger=log, method='pipe')
 
     driver_comm.provider.register_callback(driver_comm, EventCallback)
 
