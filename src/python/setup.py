@@ -2,10 +2,10 @@
 from distutils.core import setup
 setup(name='tts-api-provider',
       version='0.0',
-      packages=['provider', 'ttsapi'],
+      requires=[],
+      packages=['provider', 'ttsapi', 'drivers', 'clients'],
       description = "TTS API Provider",
       author = "Hynek Hanke, Brailcom o.p.s.",
       author_email = "hanke@brailcom.org",
-      url = "http://www.freebsoft.org/tts-api-provider/",
-      package_dir = {'': 'src'}
+      url = "http://www.freebsoft.org/tts-api-provider/"
       )

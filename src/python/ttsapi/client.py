@@ -102,8 +102,14 @@ d    available from
     def quit(self):
         """Quit"""
         self.logger.info("Terminating connection")
-        self._conn.send_command_without_reply("QUIT")
-    
+        try:
+            self._conn.send_command_without_reply("QUIT")
+            
+        # We are expecting a broken pipe IOError because
+        # the other side will terminate connection
+        except IOError:
+            pass
+
     def drivers (self):
         """Return a list of DriverDescription objects containing
         information about the available drivers

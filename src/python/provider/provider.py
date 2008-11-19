@@ -119,6 +119,7 @@ class Provider(object):
             except OSError:
                 log.error("Can't launch driver  "+ name);
                 continue;
+
             # bufsize = 1 means line buffered
             self.loaded_drivers[name] = Driver(process=process, name=name,
                                                com = driver_com)
@@ -129,10 +130,18 @@ class Provider(object):
             except TTSAPIError, error:
                 log.debug("Can't initialize driver " + name)
                 # Cleanup
+                log.debug("Terminating driver " + name)
+                try:
+                    self.loaded_drivers[name].com.quit()
+                except IOError:
+                    pass
+                log.debug("Waiting for the driver process to terminate and joinin it")
+                self.loaded_drivers[name].process.wait()
+                log.debug("Closing driver logfile")
                 logfile.close()
                 del self.loaded_drivers[name]
-                #TODO: Join process
                 continue
+
             log.debug("Driver instance for driver" + name + "initalized")
             self.loaded_drivers[name].real_capabilities \
                = self.loaded_drivers[name].com.driver_capabilities()

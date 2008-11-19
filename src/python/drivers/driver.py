@@ -28,6 +28,7 @@ import threading
 import time
 import logging
 import socket
+import signal
 import ttsapi
 from copy import copy
 
@@ -181,8 +182,11 @@ class Core(object):
         ctrl_thread_requests.push(CtrlRequest(type='quit'))
         log.debug("Joining controller thread");
         self.controller.join()
-        log.debug("End of quit in core");
-        
+
+        log.debug("Exiting")
+        # Exit this process
+        sys.exit(0)
+
     # Driver discovery
 
     def drivers(self):
@@ -725,6 +729,8 @@ class DriverLogger(logging.Logger):
 def main_loop(Core, Controller):
     """Main function and core read-process-notify loop of a driver"""
     global log
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     log = DriverLogger('tts-api-driver', level=logging.DEBUG)
     

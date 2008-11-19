@@ -1,0 +1,54 @@
+
+
+* Solve hangups on exits and tracebacks
+  -> Solved!
+
+* Solve drivers termination
+  -> Solved!
+
+* Split and cleanup configuration so that
+  internal code and internal defaults are
+  not mixed with user settings.
+  -> Solved!
+
+* festival.py doesn't exit correctly on quit()
+  but hangs instead
+  -> Solved!
+
+* Solve installation of components written in C
+
+* Solve installation of config file
+
+* Solve bug between Festival and audio output where sometimes
+a message is played more than once
+
+* Add user documentation
+
+* Add capability for filters between provider and modules
+
+* Improve logging (different levels etc.)
+
+* sd_module teď moc nefunguje
+
+* report error to caller when output module doesn't work (check)
+
+* automatic/semi-automatic tests for all public functions
+
+* User configuration
+
+* Paths configuration (pidfile etc.)
+
+* DBus communication method
+
+* Configuration / settings / execution / diagnostics script
+
+* ALSA audio output
+
+* Online debugging
+
+
+
+
+Needs help:
+
+* Packaging

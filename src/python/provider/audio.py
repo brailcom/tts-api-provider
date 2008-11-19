@@ -43,7 +43,7 @@ import ttsapi
 
 from ttsapi.connection import *
 from ttsapi.structures import AudioEvent
-from configuration import Configuration
+from user_configuration import UserConfiguration
 
 messages_in_sources_sleeper = sleep.Sleeper()
 
@@ -251,7 +251,7 @@ class Audio(object):
 
 # --- AUDIO SERVER IMPLEMENTATION ---
 
-def init(logger):
+def init(logger, config):
     """Initialize the audio subsystem."""
     global audio_ctrl_request
     global audio_events
@@ -259,7 +259,7 @@ def init(logger):
     global events_thread, playback_thread, connection_handling_thread
 
     log = logger
-    conf = Configuration(logger=log)
+    conf = config
 
     # Setup audio_ctrl_request for communication
     # of the audio subsystem with outside world

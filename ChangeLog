@@ -1,3 +1,18 @@
+2008-11-19  Hynek Hanke  <hanke@brailcom.org>
+	* all: Reorganization and new instalation procedure.
+	
+2008-08-13  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/provider/provider.py (Provider.__init__): Quit the driver process if initialization fails.
+
+2008-07-02  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/provider/configuration.py (Configuration.__init__): Typo.
+
+2008-05-12  Hynek Hanke  <hanke@brailcom.org>
+
+	* src/provider/configuration.py (Configuration): Typo.
+
 2008-05-07  Hynek Hanke  <hanke@brailcom.org>
 
 	* src/ttsapi/errors.py (ErrorDriverBusy): New class.

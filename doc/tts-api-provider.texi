@@ -60,7 +60,7 @@ General Public License''
 * Design::                      
 * Server Implementation::       
 * Device Driver Implementation::  
-* TTS API Implementations::     
+* TTS API Implementations::
 @end menu
 
 @node Introduction, Design, Top, Top
@@ -1688,5 +1688,11 @@ Please also refer to
 general description of the functionality provided by the API functions and
 for the description of the event/callback and playback/audio retrieval
 mechanisms in use.
+
+@node Performance and Testing
+@chapter Performance and Testing
+
+
+
 
 @bye

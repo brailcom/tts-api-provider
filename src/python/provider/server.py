@@ -23,11 +23,13 @@
 
 import sys
 import socket
+import signal
 import threading
 import thread
 import traceback
 import fcntl
 import os
+import atexit
 from copy import copy
 
 # Import daemon functionality
@@ -42,11 +44,13 @@ import provider
 # Logging object
 import logs
 
-# Configuration import
-from configuration import Configuration
+# User configuration
+from user_configuration import UserConfiguration
 
 # Audio output
 import audio
+
+client_threads = []
 
 class GlobalState(object):
     """Global state variables of TTS API provider"""
@@ -121,13 +125,13 @@ def audio_event_delivery(global_state):
     log.info("Waiting for events in main")
     while True:
         try:
-            log.info("WAITING NEXT EVENT")
             event = audio.audio_events.pop()
-            log.info("EVENT RECEIVED")
+            if event.type == 'quit':
+                return
+            log.info("Event received")
             provider = global_state.message_provider(event.message_id)
-            log.info("DISPATCHING EVENT")
             provider.dispatch_audio_event(event)
-            log.info("EVENT DISPATCHED")
+            log.info("Event dispatched")
         except:
             print "EXCEPTION IN LATERAL THREAD, SEE LOGS\n"
             log.info("Exception in lateral thread: " + traceback.format_exc())
@@ -167,6 +171,23 @@ def destroy_pid_file():
     pidfile.close()
     os.remove(conf.pidpath + "/" + conf.pidfile)    
 
+def join_terminated_client_threads():
+    for thread in client_threads:
+        if not thread.isAlive():
+            log.debug("Client thread %s is not alive, joining it" % thread.getName)
+            thread.join()
+    log.debug("All client threads not alive have been joined now")
+
+def join_audio_event_delivery_thread(thread):
+    log.debug("Terminating audio event delivery thread")
+    audio.events_quit()
+    log.debug("Joining audio event delivery thread")
+    thread.join()
+
+def sigint_handler(signum, frame):
+    log.info("SIGINT received, exitting")
+    sys.exit(0)
+
 def main():
     """Initialization, configuration reading, start of server
     over sockets on given port"""
@@ -174,11 +195,13 @@ def main():
     # TODO: Register signals
     #   SIGINT, SIGPIPE?, others?
 
+    signal.signal(signal.SIGINT, sigint_handler)
+
     # At this stage, logging on stdout
     log = logs.Logging()
 
     log.info("Starting server")
-    conf = Configuration(logger=log)
+    conf = UserConfiguration(logger=log)
 
     # Create primary pid file
     create_pid_file()
@@ -208,26 +231,31 @@ def main():
     log.info("Starting audio server")
     audio.port = conf.audio_port
     audio.host = conf.audio_host
-    audio.init(logger=log)
+    audio.init(logger=log, config=conf)
 
     log.info("Starting audio event delivery thread")
     audio_event_delivery_thread = threading.Thread(target=audio_event_delivery,
                         name="Audio event delivery",
                         kwargs={'global_state':global_state})
     audio_event_delivery_thread.start()
+    # Terminate and join this thread on exit()
+    atexit.register(join_audio_event_delivery_thread, audio_event_delivery_thread)
     
-    log.info("Waiting for connections")
 
-    client_threads = []
+    log.info("Waiting for connections")
+    atexit.register(join_terminated_client_threads)
     while True:
         log.info("Waiting for connections")
         (client_socket, address) = server_socket.accept()
+
+        join_terminated_client_threads()
+
         log.debug("Connection ready")
         client_provider = threading.Thread(target=serve_client,
-                         name="Provider ("+str(client_socket.fileno())+")",
-                         kwargs={'method':'socket',
-                                 'socket':client_socket,
-                                 'global_state':global_state})
+                                           name="Provider ("+str(client_socket.fileno())+")",
+                                           kwargs={'method':'socket',
+                                                   'socket':client_socket,
+                                                   'global_state':global_state})
         client_threads.append(client_provider)
         client_provider.start()
         log.info("Accepted new client, thread started")

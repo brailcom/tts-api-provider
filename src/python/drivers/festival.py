@@ -41,6 +41,8 @@ class FestivalReplyError(FestivalError):
     
 class FestivalConnection(object):
     """Connection to festival"""
+
+    _festival_socket = None
     
     def open(self,host="localhost", port=1314):
         """Open new connection to festival according to configuration"""
@@ -72,8 +74,9 @@ class FestivalConnection(object):
         self.command("speechd-set-language", "en")
         
     def close(self):
-        self._festival_socket.shutdown(1)
-        self._festival_socket.close()
+        if self._festival_socket:
+            self._festival_socket.shutdown(1)
+            self._festival_socket.close()
         
         
     def _send(self, data):
@@ -255,12 +258,21 @@ class Core(driver.Core):
 
     def init(self):
         """Initialize Festival core, connect to Festival server and prepare for speaking"""
-        festival.open(host=conf.server_host, port=conf.server_port)
+        try:
+            festival.open(host=conf.server_host, port=conf.server_port)
+        except:
+            # TODO: Log exception AND notify the caller (Provider) about the reason why
+            # the module wasn't started
+            raise ErrorInitFailed("Cant initialize Festival")
 
     def quit(self):
         """Terminate connection to festival and quit"""
         driver.log.info("Closing connection to Festival")
-        festival.close()
+        try:
+            festival.close()
+        except socket.error, IOError:
+            driver.log.error("Couldn't close Festival connection")
+
         super(Core, self).quit()
 
     def drivers(self):

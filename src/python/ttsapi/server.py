@@ -34,6 +34,10 @@ class TCPConnection(object):
 
     def _quit(self):
         self.logger.debug("Quitting in TCPConnection");
+
+        # Terminate provider
+        self.provider.quit()
+
         try:
             self.conn.close()
         except IOError:
@@ -316,8 +320,9 @@ class TCPConnection(object):
             (ErrorAccessToDriverDenied, (303, 'DRIVER ACCESS DENIED')),
             (ErrorDriverNotLoaded, (304, 'DRIVER NOT LOADED')),
             (ErrorRetrievalSocketNotInitialized, (305, 'RETRIEVAL SOCKET NOT INITIALIZED')),
-            (ErrorDriverNotAvailable, (303, 'DRIVER NOT AVAILABLE')),
+            (ErrorDriverNotAvailable, (308, 'DRIVER NOT AVAILABLE')),
             (ErrorDriverBusy, (306, 'DRIVER BUSY')),
+            (ErrorInitFailed, (307, 'INITIALIZATION FAILED')),
             (ErrorInternal, (399, 'INTERNAL ERROR')),
             (ErrorInvalidCommand, (400, 'INVALID COMMAND')),
             (ErrorInvalidArgument, (401, 'INVALID ARGUMENT')),
@@ -424,7 +429,7 @@ class TCPConnection(object):
                     err_detail = None
 
         try:
-            self.conn.send_reply(err_code, err_reply, err_detail)
+            self.conn.send_reply(err_code, err_reply, [err_detail])
         except IOError:
             self._quit()
             
@@ -497,6 +502,7 @@ class TCPConnection(object):
     
         if function == None:
             self.logger.warning("No associated function for this command, ignoring.");
+            result = None
         else:
             try:
                 if action.has_key('arg_data'):

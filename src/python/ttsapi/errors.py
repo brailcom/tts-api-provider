@@ -6,7 +6,7 @@ class Error(Exception):
         self._detail = detail
         
     def detail(self):
-        return self._detail;
+        return self._detail
 
 class ServerError(Error):
     """Server side error, problem on the server side or in the driver."""
@@ -27,6 +27,11 @@ class UnknownError(Error):
 class ErrorNotSupportedByDriver(ServerError):
     """Not supported by the driver."""
     pass
+
+class ErrorInitFailed(ServerError):
+    """Not supported by the driver."""
+    pass
+
     
 class ErrorNotSupportedByServer(ServerError):
     """Not supported by the server (implementation incomplete)."""
