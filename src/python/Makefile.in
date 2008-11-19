@@ -1,0 +1,33 @@
+
+prefix = @prefix@
+sysconfdir = @sysconfdir@
+
+all:
+	echo "TTSAPI_CONF_PATH=\"@ttsapiconfdir@\"" > provider/paths.py; \
+
+install:
+	if test -x /usr/bin/python; then \
+		/usr/bin/python setup.py install --prefix=${prefix}; \
+	else \
+		echo "Python not found, not installing TTS API Provider"; \
+	        exit 1; \
+	fi
+
+uninstall:
+
+
+clean:
+	rm -f provider/*.pyc
+	rm -f ttsapi/*.pyc
+	rm -f drivers/*.pyc
+	rm -f clients/*.pyc
+	rm -rf build
+	rm -f provider/paths.py
+
+distclean: clean
+
+distdir:
+
+
+check:
+
